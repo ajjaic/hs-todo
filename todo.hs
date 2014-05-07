@@ -23,28 +23,74 @@ pr = "+home"
 ct = "@weekend"
 test = "us doolars convert +makerspace"
 
-parsePriority :: Parser Priority
-parsePriority = fmap pri $
-    char '(' *>
-    satisfy (inClass "ABC") <*
-    char ')' where
-        pri p = case p of
-            'A' -> A
-            'B' -> B
-            'C' -> C
+parsePriority :: Parser (Maybe Priority)
+parsePriority = Just <$> parsePriority' <|> pure Nothing where
+    parsePriority' = fmap pri
+        $ char '('
+       *> satisfy (inClass "ABC")
+       <* char ')' where
+            pri p = case p of
+                'A' -> A
+                'B' -> B
+                'C' -> C
 
-parseDate :: Parser UTCTime
-parseDate = (readTime defaultTimeLocale "%Y-%m-%d") <$>
+parseAddedDate :: Parser UTCTime
+parseAddedDate = (readTime defaultTimeLocale "%Y-%m-%d") <$>
     (count 10 $ choice [digit, char '-'])
 
+parseDoneDate :: Parser (Maybe UTCTime)
+parseDoneDate = Just
+    <$> readTime defaultTimeLocale "%Y-%m-%d"
+    <$> count 10 (choice [digit, char '-'])
+    <|> pure Nothing
+
 parseProject :: Parser String
-parseProject = char '+' *>
-    many1 letter_ascii
+parseProject = char '+' *> many1 letter_ascii
 
 parseContext :: Parser String
-parseContext = char '@' *>
-    many1 letter_ascii
+parseContext = char '@' *> many1 letter_ascii
 
 parseContent :: Parser String
-parseContent = L.intercalate " " <$> sepBy1 parseWord space where
-    parseWord = many1 letter_ascii
+parseContent = L.intercalate " "
+    <$> sepBy1 parseWord space where
+            parseWord = many1 letter_ascii
+
+--parseTask :: Task
+--parseTask = Task <$>
+--    many
+--parseTask :: Task
+--parseTask = Task <$>
+--    parsePriority <*
+--    space <*>
+--    parseAddedDate <*
+--    space <*>
+--    parseContent <*
+--
+--    parseProject <*
+--    space <*>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
