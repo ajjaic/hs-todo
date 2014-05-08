@@ -8,69 +8,47 @@ import qualified Data.ByteString.Char8 as B
 import qualified Data.List as L
 
 data Priority = A | B | C deriving (Show)
-data Task = Task { taskc :: String,
-                   addedt :: UTCTime,
-                   donedt :: Maybe UTCTime,
+data Task = Task { pri :: Maybe Priority,
+                   added :: UTCTime,
+                   done :: Maybe UTCTime,
+                   taskc :: String,
                    prj :: Maybe String,
-                   pri :: Maybe Priority,
-                   ctxt :: Maybe [String] } deriving (Show)
+                   ctxt :: [String] } deriving (Show)
 
-t = "(A) 2014-04-17 us doolars convert +home @weekend"
-p = "(A)"
-d = "2014-04-17"
-c = "us doolars convert"
-pr = "+home"
-ct = "@weekend"
-test = "us doolars convert +makerspace"
+t1 = "(A) 2014-04-17 us doolars convert +home @weekend"
+t2 = "2014-04-17 us doolars convert +home @weekend"
+t3 = "2014-04-17 us doolars convert "
+t4 = "2014-04-17 us doolars convert @weekend"
 
-parsePriority :: Parser (Maybe Priority)
-parsePriority = Just <$> parsePriority' <|> pure Nothing where
-    parsePriority' = fmap pri
-        $ char '('
-       *> satisfy (inClass "ABC")
-       <* char ')' where
-            pri p = case p of
-                'A' -> A
-                'B' -> B
-                'C' -> C
+parsePriority :: Parser Priority
+parsePriority = fmap pri $ char '(' *> satisfy (inClass "ABC") <* char ')' where
+    pri p = case p of
+        'A' -> A
+        'B' -> B
+        'C' -> C
 
-parseAddedDate :: Parser UTCTime
-parseAddedDate = (readTime defaultTimeLocale "%Y-%m-%d") <$>
-    (count 10 $ choice [digit, char '-'])
-
-parseDoneDate :: Parser (Maybe UTCTime)
-parseDoneDate = Just
-    <$> readTime defaultTimeLocale "%Y-%m-%d"
-    <$> count 10 (choice [digit, char '-'])
-    <|> pure Nothing
+parseDate :: Parser UTCTime
+parseDate = (readTime defaultTimeLocale "%Y-%m-%d") <$> (count 10 $ choice [digit, char '-'])
 
 parseProject :: Parser String
 parseProject = char '+' *> many1 letter_ascii
 
-parseContext :: Parser String
-parseContext = char '@' *> many1 letter_ascii
-
 parseContent :: Parser String
-parseContent = L.intercalate " "
-    <$> sepBy1 parseWord space where
-            parseWord = many1 letter_ascii
+parseContent = L.intercalate " " <$> sepBy1 parseWord space where
+    parseWord = many1 letter_ascii
 
---parseTask :: Task
---parseTask = Task <$>
---    many
---parseTask :: Task
---parseTask = Task <$>
---    parsePriority <*
---    space <*>
---    parseAddedDate <*
---    space <*>
---    parseContent <*
---
---    parseProject <*
---    space <*>
+parseContext :: Parser [String]
+parseContext = sepBy' context space where
+    context = char '@' *> many1 letter_ascii
 
-
-
+parseTask :: Parser Task
+parseTask = Task
+    <$> optional (parsePriority <* space)
+    <*> parseDate <* space
+    <*> optional (parseDate <* space)
+    <*> parseContent
+    <*> optional (space *> parseProject <* space)
+    <*> option [] parseContext
 
 
 
