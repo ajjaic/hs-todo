@@ -1,34 +1,43 @@
+{-
+Defines the actual "Task" type.
+Contains internal functions used for parsing various
+parts of the "Task" type.
+-}
+module Tasktype(
+    Priority(..),
+    Task(..),
+    parseTask
+) where
+
 import Data.Time.Clock
 import Data.Time.Format
 import System.Locale
 import Data.Attoparsec.Combinator
 import Data.Attoparsec.ByteString.Char8
 import Control.Applicative
-import qualified Data.ByteString.Char8 as B
 import qualified Data.List as L
 
 data Priority = A | B | C deriving (Show)
-data Task = Task { pri :: Maybe Priority,
-                   added :: UTCTime,
-                   done :: Maybe UTCTime,
-                   taskc :: String,
-                   prj :: Maybe String,
-                   ctxt :: [String] } deriving (Show)
-
-t1 = "(A) 2014-04-17 us doolars convert +home @weekend"
-t2 = "2014-04-17 us doolars convert +home @weekend"
-t3 = "2014-04-17 us doolars convert "
-t4 = "2014-04-17 us doolars convert @weekend"
+data Task = Task { priority :: Maybe Priority,
+                   timeadded :: UTCTime,
+                   timedone :: Maybe UTCTime,
+                   task :: String,
+                   project :: Maybe String,
+                   context :: [String] } deriving (Show)
 
 parsePriority :: Parser Priority
-parsePriority = fmap pri $ char '(' *> satisfy (inClass "ABC") <* char ')' where
-    pri p = case p of
-        'A' -> A
-        'B' -> B
-        'C' -> C
+parsePriority = fmap pri
+    $ char '('
+   *> satisfy (inClass "ABC")
+   <* char ')' where
+        pri p = case p of
+            'A' -> A
+            'B' -> B
+            'C' -> C
 
 parseDate :: Parser UTCTime
-parseDate = (readTime defaultTimeLocale "%Y-%m-%d") <$> (count 10 $ choice [digit, char '-'])
+parseDate = (readTime defaultTimeLocale "%Y-%m-%d")
+        <$> (count 10 $ choice [digit, char '-'])
 
 parseProject :: Parser String
 parseProject = char '+' *> many1 letter_ascii
@@ -49,26 +58,4 @@ parseTask = Task
     <*> parseContent
     <*> optional (space *> parseProject <* space)
     <*> option [] parseContext
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
