@@ -3,10 +3,12 @@ Defines the actual "Task" type.
 Contains internal functions used for parsing various
 parts of the "Task" type.
 -}
+
 module Tasktype(
     Priority(..),
     Task(..),
-    parseTask
+    parseTask,
+--    pptask
 ) where
 
 import Data.Time.Clock
@@ -17,14 +19,17 @@ import Data.Attoparsec.ByteString.Char8
 import Control.Applicative
 import qualified Data.List as L
 
-data Priority = A | B | C deriving (Show)
+data Priority = A | B | C
 data Task = Task { priority :: Maybe Priority,
                    timeadded :: UTCTime,
                    timedone :: Maybe UTCTime,
                    task :: String,
                    project :: Maybe String,
-                   context :: [String] } deriving (Show)
+                   context :: [String] }
 
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+-- Parser for parsing tasks
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 parsePriority :: Parser Priority
 parsePriority = fmap pri
     $ char '('
@@ -55,7 +60,36 @@ parseTask = Task
     <$> optional (parsePriority <* space)
     <*> parseDate <* space
     <*> optional (parseDate <* space)
-    <*> parseContent
-    <*> optional (space *> parseProject <* space)
+    <*> parseContent <* (optional space)
+    <*> optional (parseProject <* space)
     <*> option [] parseContext
+
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+-- Show instance for task
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+
+instance Show (Priority) where
+    show A = "(A)"
+    show B = "(B)"
+    show C = "(C)"
+
+instance Show (Task) where
+    show t = L.intercalate " " $ filter (not . null) $ p:ta:td:tk:pr:ct:[] where
+        p  = maybe "" show (priority t)
+        ta = show (timeadded t)
+        td = maybe "" show (timedone t)
+        tk = task t
+        pr = maybe "" id $ ('+':) <$> (project t)
+        ct = L.intercalate " " $ map ('@':) $ context t
+
+pptask :: Task -> String
+pptask = show
+
+
+
+
+
+
+
 
