@@ -22,6 +22,8 @@ import qualified Data.List as L
 import qualified Data.ByteString.Char8 as B
 
 data Priority = A | B | C
+-- TODO: why does priority need to its own type. Doesn't solve
+-- anything.
 data Task = Task { priority :: Maybe Priority,
                    timeadded :: UTCTime,
                    timedone :: Maybe UTCTime,
@@ -47,7 +49,7 @@ parseDate = (readTime defaultTimeLocale "%Y-%m-%d")
         <$> (count 10 $ choice [digit, char '-'])
 
 parseProject :: Parser String
-parseProject = char '+' *> many1 letter_ascii
+parseProject = char '+' *> many1 (letter_ascii <|> digit)
 
 parseContent :: Parser String
 parseContent = L.intercalate " " <$> sepBy1 parseWord space where
@@ -87,6 +89,7 @@ instance Show (Task) where
 -- Read |Task| from file
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 readTaskFile :: FilePath -> IO [Task]
+-- Proper error handling required
 readTaskFile f = withFile f ReadMode helper where
     helper h = do
         bytes <- B.hGetContents h
