@@ -19,6 +19,7 @@ import Data.Attoparsec.ByteString.Char8
 import Control.Applicative
 import System.IO (withFile, IOMode(ReadMode))
 import System.Console.Haskeline
+import Data.Maybe (fromMaybe, catMaybes)
 import qualified Data.List as L
 import qualified Data.ByteString.Char8 as B
 
@@ -83,7 +84,7 @@ instance Show (Task) where
         ta = show (timeadded t)
         td = maybe "" show (timedone t)
         tk = task t
-        pr = maybe "" id $ ('+':) <$> (project t)
+        pr = fromMaybe "" $ ('+':) <$> (project t)
         ct = L.intercalate " " $ map ('@':) $ context t
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -104,6 +105,8 @@ readTaskFile f = withFile f ReadMode helper where
 -- REPL Commands
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 cmds = [("ls",   listTasks,   "List all the tasks"),
+        ("lsp",  listProjects,"List all the projects"),
+        ("lsc",  listContexts,"List all the contexts"),
         ("pv",   projectView, "List all tasks projectwise"),
         ("cv",   contextView, "List all tasks contextwise"),
         ("help", help,        "Show this help"),
@@ -111,30 +114,45 @@ cmds = [("ls",   listTasks,   "List all the tasks"),
         ("del",  delTask,     "Delete an existing task"),
         ("app",  appTask,     "Append to an existing task")]
 
-listTasks :: [Task] -> String -> InputT IO ()
+listTasks :: [Task] -> Maybe String -> InputT IO ()
 listTasks t _ = mapM_ outputStrLn $ map show t
 
-projectView :: [Task] -> String -> InputT IO ()
+projectView :: [Task] -> Maybe String -> InputT IO ()
+projectView tasks Nothing = mapM_ allprjs $ lsprojects tasks where
+    allprjs p = outputStrLn (makeProject p) >> projectView tasks (Just p)
 projectView tasks p = mapM_ outputStrLn
     $ map show
     $ filter (helper . project) tasks where
-        helper (Just prj) = prj == p
-        helper _ = False
+        helper prj = prj == p
 
-contextView = undefined
+contextView :: [Task] -> Maybe String -> InputT IO ()
+contextView t Nothing = mapM_ allctxts $ lscontexts t where
+    allctxts c = outputStrLn (makeContext c) >> contextView t (Just c)
+contextView t (Just c) = mapM_ outputStrLn
+    $ map show
+    $ filter (helper . context) t where
+        helper = any (==c)
+
+listProjects :: [Task] -> Maybe String -> InputT IO ()
+listProjects t _ = mapM_ outputStrLn $ lsprojects t
+
+listContexts :: [Task] -> Maybe String -> InputT IO ()
+listContexts t _ = mapM_ outputStrLn $ lscontexts t
+
 help        = undefined
 addTask     = undefined
 delTask     = undefined
 appTask     = undefined
 
 
-execCmd :: [Task] -> (String, String) -> InputT IO ()
-execCmd t (c, args) = if L.null cmd'
-                        then outputStrLn ("WTF is: " ++ c)
-                        else let (_, cmd, _) = head cmd'
-                              in cmd t args
-    where
-        cmd' = filter (\(c',_,_) -> c == c') cmds
+execCmd :: [Task] -> (String, Maybe String) -> InputT IO ()
+execCmd t (c, args) = getcmd where
+    getcmd
+        | L.null cmd' = outputStrLn (unknownCmd ++ c)
+        | otherwise = cmd t args
+    cmd' = filter (\(c',_,_) -> c == c') cmds
+    (_,cmd, _) = head cmd'
+
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Helper functions
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -144,9 +162,23 @@ todoFile = "todo.txt"
 prompt :: String
 prompt = ">> "
 
+unknownCmd :: String
+unknownCmd = "WTF is: "
+
 blankLines :: Int -> IO ()
 blankLines n = putStr $ replicate n '\n'
 
+lsprojects :: [Task] -> [String]
+lsprojects t = L.nub $ catMaybes $ map project t
+
+lscontexts :: [Task] -> [String]
+lscontexts t = L.nub $ concat $ map context t
+
+makeProject :: String -> String
+makeProject p = "+" ++ p
+
+makeContext :: String -> String
+makeContext c = "@" ++ c
 -- -- -- --  -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- REPL
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -161,8 +193,9 @@ oneREPloop t = do
         Just cmdargs -> do execCmd t $ mbreak cmdargs ""
                            oneREPloop t
     where
-        mbreak (x:xs) s = if isSpace x then (s, xs) else mbreak xs (s ++ [x])
-        mbreak [] s = (s, "")
+        mbreak :: String -> String -> (String, Maybe String)
+        mbreak (x:xs) s = if isSpace x then (s, Just xs) else mbreak xs (s ++ [x])
+        mbreak [] s = (s, Nothing)
 
 main :: IO ()
 main = do
