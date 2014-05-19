@@ -22,17 +22,23 @@ import System.Console.Haskeline
 import Data.Maybe (fromMaybe, catMaybes)
 import qualified Data.List as L
 import qualified Data.ByteString.Char8 as B
+import qualified Data.Map.Lazy as M
+import Control.Monad.Trans.State.Lazy
+import Control.Monad.Trans.Class (lift)
 
 data Priority = A | B | C
--- TODO: why does priority need to its own type. Doesn't solve
+-- TODO: Why does priority need to its own type. Doesn't solve
 -- anything.
-data Task = Task { priority :: Maybe Priority,
+data Task = Task { priority  :: Maybe Priority,
                    timeadded :: UTCTime,
-                   timedone :: Maybe UTCTime,
-                   task :: String,
-                   project :: Maybe String,
-                   context :: [String] }
+                   timedone  :: Maybe UTCTime,
+                   task      :: String,
+                   project   :: Maybe String,
+                   context   :: [String] }
 
+data Sessionstate = Sessionstate { tasks    :: M.Map Int Task,
+                                   projects :: [String],
+                                   contexts :: [String]} deriving (Show)
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Parser for parsing various components |Task|
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -54,12 +60,14 @@ parseProject :: Parser String
 parseProject = char '+' *> many1 (letter_ascii <|> digit)
 
 parseContent :: Parser String
-parseContent = L.intercalate " " <$> sepBy1 parseWord space where
+--TODO: Content can be anything. At the moment accepts only letters
+--and digits
+parseContent  = L.intercalate " " <$> sepBy1 parseWord space where
     parseWord = many1 (letter_ascii <|> digit)
 
 parseContext :: Parser [String]
 parseContext = sepBy' context space where
-    context = char '@' *> many1 (letter_ascii <|> digit)
+    context  = char '@' *> many1 (letter_ascii <|> digit)
 
 parseTask :: Parser Task
 parseTask = Task
@@ -70,6 +78,10 @@ parseTask = Task
     <*> optional (parseProject <* space)
     <*> option [] parseContext
 
+parseInput :: Parser (String, String)
+parseInput = (,)
+    <$> many1 letter_ascii
+    <*> option "" (space *> many' anyChar)
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Show instance for |Task|
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -91,7 +103,7 @@ instance Show (Task) where
 -- Read |Task| from file
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 readTaskFile :: FilePath -> IO [Task]
--- Proper error handling required
+-- TODO: Proper error handling required
 readTaskFile f = withFile f ReadMode helper where
     helper h = do
         bytes <- B.hGetContents h
@@ -183,26 +195,47 @@ makeContext c = "@" ++ c
 -- REPL
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-oneREPloop :: [Task] -> InputT IO ()
-oneREPloop t = do
-    c <- getInputLine prompt
-    case c of
-        Nothing -> return ()
-        Just "" -> oneREPloop t
-        Just "quit" -> return ()
-        Just cmdargs -> do execCmd t $ mbreak cmdargs ""
-                           oneREPloop t
-    where
-        mbreak :: String -> String -> (String, Maybe String)
-        mbreak (x:xs) s = if isSpace x then (s, Just xs) else mbreak xs (s ++ [x])
-        mbreak [] s = (s, Nothing)
+{-oneREPloop :: [Task] -> InputT IO ()                                              -}
+{-oneREPloop t = do                                                                 -}
+{-    c <- getInputLine prompt                                                      -}
+{-    case c of                                                                     -}
+{-        Nothing -> return ()                                                      -}
+{-        Just "" -> oneREPloop t                                                   -}
+{-        Just "quit" -> return ()                                                  -}
+{-        Just cmdargs -> do execCmd t $ mbreak cmdargs ""                          -}
+{-                           oneREPloop t                                           -}
+{-    where                                                                         -}
+{-        mbreak :: String -> String -> (String, Maybe String)                      -}
+{-        mbreak (x:xs) s = if isSpace x then (s, Just xs) else mbreak xs (s ++ [x])-}
+{-        mbreak [] s = (s, Nothing)                                                -}
+
+--main :: IO ()
+--main = do
+--    tasks <- readTaskFile todoFile
+--    let ss =
+--    runInputT defaultSettings $ oneREPloop tasks
+
 
 main :: IO ()
 main = do
     tasks <- readTaskFile todoFile
-    runInputT defaultSettings $ oneREPloop tasks
+    let taskmap = M.fromAscList $ zip [1 ..] tasks
+        projects = lsprojects tasks
+        contexts = lscontexts tasks
+        ss = Sessionstate taskmap projects contexts
+    runInputT defaultSettings $ evalStateT oneREPloop ss
 
+oneREPloop :: StateT Sessionstate (InputT IO) ()
+oneREPloop = do c <- lift $ getInputLine prompt
+                return ()
+                case c of
+                    Nothing -> return ()
+                    Just "" -> oneREPloop
+                    Just "quit" -> return ()
+                    Just cmdargs -> cmd args
 
+    where
+        (cmd, args) = undefined
 
 
 
