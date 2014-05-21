@@ -19,7 +19,7 @@ import Data.Attoparsec.ByteString.Char8
 import Control.Applicative
 import System.IO (withFile, IOMode(ReadMode))
 import System.Console.Haskeline
-import Data.Maybe (fromMaybe, catMaybes)
+import Data.Maybe (fromMaybe, catMaybes, isNothing, fromJust)
 import qualified Data.List as L
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Map.Lazy as M
@@ -36,9 +36,6 @@ data Task = Task { priority  :: Maybe Priority,
                    project   :: Maybe String,
                    context   :: [String] }
 
-data Sessionstate = Sessionstate { tasks    :: M.Map Int Task,
-                                   projects :: [String],
-                                   contexts :: [String]} deriving (Show)
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Parser for parsing various components |Task|
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -116,54 +113,64 @@ readTaskFile f = withFile f ReadMode helper where
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- REPL Commands
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-cmds = [("ls",   listTasks,   "List all the tasks"),
-        ("lsp",  listProjects,"List all the projects"),
-        ("lsc",  listContexts,"List all the contexts"),
-        ("pv",   projectView, "List all tasks projectwise"),
-        ("cv",   contextView, "List all tasks contextwise"),
-        ("help", help,        "Show this help"),
-        ("at",   addTask,     "Create a new task"),
-        ("del",  delTask,     "Delete an existing task"),
-        ("app",  appTask,     "Append to an existing task")]
+data Command = Command {name :: String,
+                        func :: Maybe String -> StateT Sessionstate (InputT IO) (),
+                        desc :: String}
 
-listTasks :: [Task] -> Maybe String -> InputT IO ()
-listTasks t _ = mapM_ outputStrLn $ map show t
+ls = Command "ls" listTasks "List all the tasks"
+cmds = [ls]
 
-projectView :: [Task] -> Maybe String -> InputT IO ()
-projectView tasks Nothing = mapM_ allprjs $ lsprojects tasks where
-    allprjs p = outputStrLn (makeProject p) >> projectView tasks (Just p)
-projectView tasks p = mapM_ outputStrLn
-    $ map show
-    $ filter (helper . project) tasks where
-        helper prj = prj == p
+{-cmds = [("ls",   listTasks,   "List all the tasks")]-}
+        {-("lsp",  listProjects,"List all the projects"),     -}
+        {-("lsc",  listContexts,"List all the contexts"),     -}
+        {-("pv",   projectView, "List all tasks projectwise"),-}
+        {-("cv",   contextView, "List all tasks contextwise"),-}
+        {-("help", help,        "Show this help"),            -}
+        {-("at",   addTask,     "Create a new task"),         -}
+        {-("del",  delTask,     "Delete an existing task"),   -}
+        {-("app",  appTask,     "Append to an existing task")]-}
 
-contextView :: [Task] -> Maybe String -> InputT IO ()
-contextView t Nothing = mapM_ allctxts $ lscontexts t where
-    allctxts c = outputStrLn (makeContext c) >> contextView t (Just c)
-contextView t (Just c) = mapM_ outputStrLn
-    $ map show
-    $ filter (helper . context) t where
-        helper = any (==c)
+{-listTasks :: [Task] -> Maybe String -> InputT IO ()                      -}
+{-listTasks t _ = mapM_ outputStrLn $ map show t                           -}
 
-listProjects :: [Task] -> Maybe String -> InputT IO ()
-listProjects t _ = mapM_ outputStrLn $ lsprojects t
+{-projectView :: [Task] -> Maybe String -> InputT IO ()                    -}
+{-projectView tasks Nothing = mapM_ allprjs $ lsprojects tasks where       -}
+{-    allprjs p = outputStrLn (makeProject p) >> projectView tasks (Just p)-}
+{-projectView tasks p = mapM_ outputStrLn                                  -}
+{-    $ map show                                                           -}
+{-    $ filter (helper . project) tasks where                              -}
+{-        helper prj = prj == p                                            -}
 
-listContexts :: [Task] -> Maybe String -> InputT IO ()
-listContexts t _ = mapM_ outputStrLn $ lscontexts t
+{-contextView :: [Task] -> Maybe String -> InputT IO ()                    -}
+{-contextView t Nothing = mapM_ allctxts $ lscontexts t where              -}
+{-    allctxts c = outputStrLn (makeContext c) >> contextView t (Just c)   -}
+{-contextView t (Just c) = mapM_ outputStrLn                               -}
+{-    $ map show                                                           -}
+{-    $ filter (helper . context) t where                                  -}
+{-        helper = any (==c)                                               -}
 
-help        = undefined
-addTask     = undefined
-delTask     = undefined
-appTask     = undefined
+{-listProjects :: [Task] -> Maybe String -> InputT IO ()                   -}
+{-listProjects t _ = mapM_ outputStrLn $ lsprojects t                      -}
+
+{-listContexts :: [Task] -> Maybe String -> InputT IO ()                   -}
+{-listContexts t _ = mapM_ outputStrLn $ lscontexts t                      -}
+
+{-help        = undefined                                                  -}
+{-addTask     = undefined                                                  -}
+{-delTask     = undefined                                                  -}
+{-appTask     = undefined                                                  -}
 
 
-execCmd :: [Task] -> (String, Maybe String) -> InputT IO ()
-execCmd t (c, args) = getcmd where
-    getcmd
-        | L.null cmd' = outputStrLn (unknownCmd ++ c)
-        | otherwise = cmd t args
-    cmd' = filter (\(c',_,_) -> c == c') cmds
-    (_,cmd, _) = head cmd'
+{-execCmd :: [Task] -> (String, Maybe String) -> InputT IO ()              -}
+{-execCmd t (c, args) = getcmd where                                       -}
+{-    getcmd                                                               -}
+{-        | L.null cmd' = outputStrLn (unknownCmd ++ c)                    -}
+{-        | otherwise = cmd t args                                         -}
+{-    cmd' = filter (\(c',_,_) -> c == c') cmds                            -}
+{-    (_,cmd, _) = head cmd'                                               -}
+listTasks :: Maybe String -> StateT Sessionstate (InputT IO) ()
+listTasks _ = get
+    >>= (\s -> lift $ mapM_ (outputStrLn . show) $ M.elems $ tasks s)
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Helper functions
@@ -191,6 +198,11 @@ makeProject p = "+" ++ p
 
 makeContext :: String -> String
 makeContext c = "@" ++ c
+
+lookupFunction :: String -> Maybe (Maybe String -> StateT Sessionstate (InputT IO) ())
+lookupFunction cmd =  if L.null cmd' then Nothing else Just $ func $ head cmd' where
+    cmd' = filter (\c -> (name c) == cmd) cmds
+
 -- -- -- --  -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- REPL
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -215,6 +227,9 @@ makeContext c = "@" ++ c
 --    let ss =
 --    runInputT defaultSettings $ oneREPloop tasks
 
+data Sessionstate = Sessionstate { tasks    :: M.Map Int Task,
+                                   projects :: [String],
+                                   contexts :: [String]} deriving (Show)
 
 main :: IO ()
 main = do
@@ -232,11 +247,13 @@ oneREPloop = do c <- lift $ getInputLine prompt
                     Nothing -> return ()
                     Just "" -> oneREPloop
                     Just "quit" -> return ()
-                    Just cmdargs -> cmd args
-
+                    Just cmdargs -> let (cmd, args) = mbreak cmdargs ""
+                                        cmd' = lookupFunction cmd
+                                     in if isNothing cmd' then oneREPloop else (fromJust cmd') args
     where
-        (cmd, args) = undefined
-
+        mbreak :: String -> String -> (String, Maybe String)
+        mbreak (x:xs) s = if isSpace x then (s, Just xs) else mbreak xs (s ++ [x])
+        mbreak [] s = (s, Nothing)
 
 
 
