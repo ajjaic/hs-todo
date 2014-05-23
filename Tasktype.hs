@@ -120,7 +120,7 @@ lsp  = Command   "lsp"    listProjects   "List all the projects"
 lsc  = Command   "lsc"    listContexts   "List all the contexts"
 pv   = Command   "pv"     projectView    "List all tasks projectwise"
 cv   = Command   "cv"     contextView    "List all tasks contextwise"
-help = Command   "help"   todoHelp           "Show this help"
+help = Command   "help"   todoHelp       "Show this help"
 at   = Command   "at"     addTask        "Create a new task"
 del  = Command   "del"    deleteTask     "Delete an existing task"
 app  = Command   "app"    appTask        "Append to an existing task"
@@ -144,12 +144,11 @@ contextView (Just c) = do
 contextView _ = do
     ss <- get
     let c = contexts ss
-        (c', c'') = (init c, last c)
-        c'v = mapM_ (\cc -> contextView cc  >> lift (outputStrLn "")) (map Just c')
-        c''v = contextView (Just c'')
-    if length c == 1
-        then contextView (Just (head c))
-        else c'v >> c''v
+    if L.null c
+        then return ()
+        else do
+            mapM_ (\mc -> contextView mc >> (lift $ outputStrLn "")) (map Just (init c))
+            contextView (Just $ last c)
 
 
 projectView :: Maybe String -> StateT Sessionstate (InputT IO) ()
@@ -164,12 +163,11 @@ projectView prj@(Just p) = do
 projectView _ = do
     ss <- get
     let p = projects ss
-        (p', p'') = (init p, last p)
-        p'v = mapM_ (\pp -> projectView pp  >> lift (outputStrLn "")) (map Just p')
-        p''v = projectView (Just p'')
-    if length p == 1
-        then projectView (Just $ head p)
-        else p'v >> p''v
+    if L.null p
+        then return ()
+        else do
+           mapM_ (\mp -> projectView mp >> (lift $ outputStrLn "")) (map Just (init p))
+           projectView (Just $ last p)
 
 
 listTasks :: Maybe String -> StateT Sessionstate (InputT IO) ()
