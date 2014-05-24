@@ -9,6 +9,8 @@
 {-    readTaskFile,-}
 {-) where          -}
 
+-- TODO: You can't selectively choose to import some fully and
+-- some partially
 import Data.Time.Clock
 import Data.Time.Format
 import System.Locale (defaultTimeLocale)
@@ -37,6 +39,8 @@ data Task = Task { priority  :: Maybe Priority,
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Parser for parsing various components |Task|
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+datetimeformat = "%Y-%m-%d %H:%M"
+
 parsePriority :: Parser Priority
 parsePriority = fmap pri
     $ char '('
@@ -48,8 +52,8 @@ parsePriority = fmap pri
             'C' -> C
 
 parseDate :: Parser UTCTime
-parseDate = (readTime defaultTimeLocale "%Y-%m-%d")
-        <$> (count 10 $ choice [digit, char '-'])
+parseDate = (readTime defaultTimeLocale datetimeformat)
+        <$> (count 16 $ choice [digit, char '-', char ':', space])
 
 parseProject :: Parser String
 parseProject = char '+' *> many1 (letter_ascii <|> digit)
@@ -74,6 +78,8 @@ parseTask = Task
     <*> option [] parseContext
 
 parseInput :: Parser (String, String)
+-- TODO: If using in place of mbreak, the second argument should be a
+-- Maybe
 parseInput = (,)
     <$> many1 letter_ascii
     <*> option "" (space *> many' anyChar)
@@ -86,13 +92,14 @@ instance Show (Priority) where
     show C = "(C)"
 
 instance Show (Task) where
-    show t = L.intercalate " " $ filter (not . null) $ p:ta:td:tk:pr:ct:[] where
-        p  = maybe "" show (priority t)
-        ta = show (timeadded t)
-        td = maybe "" show (timedone t)
-        tk = task t
-        pr = fromMaybe "" $ ('+':) <$> (project t)
-        ct = L.intercalate " " $ map ('@':) $ context t
+    show t      = L.intercalate " " $ filter (not . null) $ p:ta:td:tk:pr:ct:[] where
+        p       = maybe "" show (priority t)
+        ta      = fmttime (timeadded t)
+        td      = maybe "" fmttime (timedone t)
+        tk      = task t
+        pr      = fromMaybe "" $ ('+':) <$> (project t)
+        ct      = L.intercalate " " $ map ('@':) $ context t
+        fmttime = formatTime defaultTimeLocale datetimeformat
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Read |Task| from file
@@ -128,9 +135,15 @@ cmds = [ls, lsp, lsc, pv, cv, help, at, del, app]
 
 
 todoHelp    = undefined
-addTask     = undefined
 deleteTask  = undefined
 appTask     = undefined
+
+addTask :: Maybe String -> StateT Sessionstate (InputT IO) ()
+addTask Nothing = return ()
+addTask (Just xtsk) = do
+    utc <- lift $ return getCurrentTime
+    lift $ outputStrLn $ show utc
+
 
 contextView :: Maybe String -> StateT Sessionstate (InputT IO) ()
 contextView (Just c) = do
@@ -204,7 +217,6 @@ makeProject p = "+" ++ p
 makeContext :: String -> String
 makeContext c = "@" ++ c
 
-
 lookupFunction :: String -> Maybe (Maybe String -> StateT Sessionstate (InputT IO) ())
 lookupFunction cmd =  if L.null cmd' then Nothing else Just $ func $ head cmd' where
     cmd' = filter (\c -> (name c) == cmd) cmds
@@ -243,6 +255,7 @@ oneREPloop = do c <- lift $ getInputLine prompt
                                             then unknowcmd cmd
                                             else applycmd (fromJust cmd') args
     where
+        -- TODO:Use the input parser instead of mbreak
         mbreak (x:xs) s = if isSpace x then (s, Just xs) else mbreak xs (s ++ [x])
         mbreak [] s     = (s, Nothing)
         applycmd c args = (c args) >> oneREPloop
