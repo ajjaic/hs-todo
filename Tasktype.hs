@@ -2,12 +2,6 @@
 --Contains internal functions used for parsing various
 --parts of the |Task| type.
 
-{-module Tasktype( -}
-{-    Priority(..),-}
-{-    Task(..),    -}
-{-    parseTask,   -}
-{-    readTaskFile,-}
-{-) where          -}
 
 -- TODO: You can't selectively choose to import some fully and
 -- some partially
@@ -20,11 +14,13 @@ import Control.Applicative
 import System.IO (withFile, IOMode(ReadMode))
 import System.Console.Haskeline
 import Data.Maybe (fromMaybe, catMaybes, isNothing, fromJust)
+import Control.Monad.Trans.State.Lazy
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.IO.Class (liftIO)
+import Text.Printf (printf)
 import qualified Data.List as L
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Map.Lazy as M
-import Control.Monad.Trans.State.Lazy
-import Control.Monad.Trans.Class (lift)
 
 data Priority = A | B | C
 -- TODO: Why does priority need to its own type. Doesn't solve
@@ -74,15 +70,13 @@ parseTask = Task
     <*> parseDate <* space
     <*> optional (parseDate <* space)
     <*> parseContent <* (optional space)
-    <*> optional (parseProject <* space)
+    <*> optional parseProject <* (optional space)
     <*> option [] parseContext
 
-parseInput :: Parser (String, String)
--- TODO: If using in place of mbreak, the second argument should be a
--- Maybe
+parseInput :: Parser (String, Maybe String)
 parseInput = (,)
     <$> many1 letter_ascii
-    <*> option "" (space *> many' anyChar)
+    <*> optional (space *> many' anyChar)
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Show instance for |Task|
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -97,6 +91,7 @@ instance Show (Task) where
         ta      = fmttime (timeadded t)
         td      = maybe "" fmttime (timedone t)
         tk      = task t
+-- TODO: Use makeProject and makeContext instead of ('+':) and ('@':)
         pr      = fromMaybe "" $ ('+':) <$> (project t)
         ct      = L.intercalate " " $ map ('@':) $ context t
         fmttime = formatTime defaultTimeLocale datetimeformat
@@ -122,27 +117,61 @@ data Command = Command {name :: String,
                         func :: Maybe String -> StateT Sessionstate (InputT IO) (),
                         desc :: String}
 
-ls   = Command   "ls"     listTasks      "List all the tasks"
-lsp  = Command   "lsp"    listProjects   "List all the projects"
-lsc  = Command   "lsc"    listContexts   "List all the contexts"
-pv   = Command   "pv"     projectView    "List all tasks projectwise"
-cv   = Command   "cv"     contextView    "List all tasks contextwise"
-help = Command   "help"   todoHelp       "Show this help"
-at   = Command   "at"     addTask        "Create a new task"
-del  = Command   "del"    deleteTask     "Delete an existing task"
-app  = Command   "app"    appTask        "Append to an existing task"
-cmds = [ls, lsp, lsc, pv, cv, help, at, del, app]
+cmds = [Command   "ls"     listTasks      "List all the tasks",
+        Command   "lsp"    listProjects   "List all the projects",
+        Command   "lsc"    listContexts   "List all the contexts",
+        Command   "pv"     projectView    "List all tasks projectwise",
+        Command   "cv"     contextView    "List all tasks contextwise",
+        Command   "h"      todoHelp       "Show this help",
+        Command   "at"     addTask        "Create a new task",
+        Command   "del"    deleteTask     "Delete an existing task",
+        Command   "app"    appTask        "Append to an existing task"
+       ]
 
+getCmd :: String -> Maybe Command
+getCmd c = if L.null cmds' then Nothing else Just (head cmds') where
+    cmds' = filter helper cmds
+    helper cmd = c == (name cmd)
 
-todoHelp    = undefined
 deleteTask  = undefined
 appTask     = undefined
 
+data Taskadd = Taskadd
+    {tapriority :: Maybe Priority,
+     tatask     :: String,
+     taproject  :: Maybe String,
+     tacontext  :: [String]}
+
+parseTaskAdd :: Parser Taskadd
+parseTaskAdd = Taskadd
+    <$> optional (parsePriority <* space)
+    <*> parseContent <* (optional space)
+    <*> (optional parseProject) <* (optional space)
+    <*> option [] parseContext
+
+todoHelp :: Maybe String -> StateT Sessionstate (InputT IO) ()
+todoHelp Nothing = lift $ mapM_ outputStrLn $ map (\c -> uncurry (printf "%3s: %s") (name c, desc c)) cmds
+todoHelp (Just c) = lift $ outputStrLn (maybe (unknowcmd c) desc (getCmd c))
+
 addTask :: Maybe String -> StateT Sessionstate (InputT IO) ()
-addTask Nothing = return ()
+-- TODO: The Nothing case should do something useful
+addTask Nothing     = lift $ outputStrLn "Nothing to add"
 addTask (Just xtsk) = do
-    utc <- lift $ return getCurrentTime
-    lift $ outputStrLn $ show utc
+    case parseOnly parseTaskAdd (B.pack xtsk) of
+        (Right r) -> do
+            utc <- lift $ liftIO getCurrentTime
+            ss  <- get
+            let newpriority    = tapriority r
+                newtaskcontent = tatask r
+                newproject     = taproject r
+                newcontexts    = tacontext r
+                newtask        = Task newpriority utc Nothing newtaskcontent newproject newcontexts
+                newtaskset     = M.insert 1 newtask $ M.mapKeys (+1) (tasks ss)
+                newprojectset  = if isNothing newproject then (projects ss) else L.union (projects ss) [fromJust newproject]
+                newcontextset  = if L.null newcontexts then (contexts ss) else L.union (contexts ss) newcontexts
+                newss          = Sessionstate newtaskset newprojectset newcontextset
+            put newss
+        (Left l) -> lift $ outputStrLn l
 
 
 contextView :: Maybe String -> StateT Sessionstate (InputT IO) ()
@@ -184,6 +213,7 @@ projectView _ = do
 
 
 listTasks :: Maybe String -> StateT Sessionstate (InputT IO) ()
+-- TODO: Tasks need to be displayed with numbers
 listTasks _ = get
     >>= (\s -> lift $ mapM_ (outputStrLn . show) $ M.elems $ tasks s)
 
@@ -221,6 +251,7 @@ lookupFunction :: String -> Maybe (Maybe String -> StateT Sessionstate (InputT I
 lookupFunction cmd =  if L.null cmd' then Nothing else Just $ func $ head cmd' where
     cmd' = filter (\c -> (name c) == cmd) cmds
 
+unknowcmd c = "WTF is: " ++ c
 -- -- -- --  -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- REPL
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -249,17 +280,8 @@ oneREPloop = do c <- lift $ getInputLine prompt
                     Just ""      -> oneREPloop
                     Just "quit"  -> return ()
                     Just "exit"  -> return ()
-                    Just cmdargs -> let (cmd, args) = mbreak cmdargs ""
-                                        cmd' = lookupFunction cmd
-                                     in if isNothing cmd'
-                                            then unknowcmd cmd
-                                            else applycmd (fromJust cmd') args
-    where
-        -- TODO:Use the input parser instead of mbreak
-        mbreak (x:xs) s = if isSpace x then (s, Just xs) else mbreak xs (s ++ [x])
-        mbreak [] s     = (s, Nothing)
-        applycmd c args = (c args) >> oneREPloop
-        unknowcmd c     = (lift $ outputStrLn ("WTF is: " ++ c)) >> oneREPloop
+                    Just cmdargs -> let (cmd, args) = (\(Right input) -> input) $ parseOnly parseInput (B.pack cmdargs)
+                                     in (maybe (lift $ outputStrLn $ unknowcmd cmd) (($ args) . func) (getCmd cmd)) >> oneREPloop
 
 
 
