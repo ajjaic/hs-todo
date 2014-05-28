@@ -280,8 +280,11 @@ oneREPloop = do c <- lift $ getInputLine prompt
                     Just ""      -> oneREPloop
                     Just "quit"  -> return ()
                     Just "exit"  -> return ()
-                    Just cmdargs -> let (cmd, args) = (\(Right input) -> input) $ parseOnly parseInput (B.pack cmdargs)
-                                     in (maybe (lift $ outputStrLn $ unknowcmd cmd) (($ args) . func) (getCmd cmd)) >> oneREPloop
+                    Just cmdargs -> parsedinp cmdargs
+    where
+        parsedinp c = case parseOnly parseInput (B.pack c) of
+            (Right (cmd, args)) -> (maybe (lift $ outputStrLn $ unknowcmd cmd) (($ args) . func) (getCmd cmd)) >> oneREPloop
+            (Left error) -> (lift $ outputStrLn $ unknowcmd c) >> oneREPloop
 
 
 
