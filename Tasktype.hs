@@ -91,9 +91,8 @@ instance Show (Task) where
         ta      = fmttime (timeadded t)
         td      = maybe "" fmttime (timedone t)
         tk      = task t
--- TODO: Use makeProject and makeContext instead of ('+':) and ('@':)
-        pr      = fromMaybe "" $ ('+':) <$> (project t)
-        ct      = L.intercalate " " $ map ('@':) $ context t
+        pr      = fromMaybe "" $ makeProject <$> (project t)
+        ct      = L.intercalate " " $ map makeContext $ context t
         fmttime = formatTime defaultTimeLocale datetimeformat
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -154,7 +153,6 @@ todoHelp Nothing = lift $ mapM_ outputStrLn $ map (\c -> uncurry (printf "%3s: %
 todoHelp (Just c) = lift $ outputStrLn (maybe (unknowcmd c) desc (getCmd c))
 
 addTask :: Maybe String -> StateT Sessionstate (InputT IO) ()
--- TODO: The Nothing case should do something useful
 addTask Nothing     = lift $ outputStrLn "Nothing to add"
 addTask (Just xtsk) = do
     case parseOnly parseTaskAdd (B.pack xtsk) of
@@ -213,9 +211,11 @@ projectView _ = do
 
 
 listTasks :: Maybe String -> StateT Sessionstate (InputT IO) ()
--- TODO: Tasks need to be displayed with numbers
-listTasks _ = get
-    >>= (\s -> lift $ mapM_ (outputStrLn . show) $ M.elems $ tasks s)
+listTasks _ = do
+    ss <- get
+    let tasksascending = M.assocs (M.map show $ tasks ss)
+        printstrs = map (uncurry (printf "%3d -> %s")) tasksascending
+    lift $ mapM_ outputStrLn printstrs
 
 listProjects :: Maybe String -> StateT Sessionstate (InputT IO) ()
 listProjects _ = do
@@ -242,14 +242,10 @@ lscontexts :: [Task] -> [String]
 lscontexts t = L.nub $ concat $ map context t
 
 makeProject :: String -> String
-makeProject p = "+" ++ p
+makeProject p = '+' : p
 
 makeContext :: String -> String
-makeContext c = "@" ++ c
-
-lookupFunction :: String -> Maybe (Maybe String -> StateT Sessionstate (InputT IO) ())
-lookupFunction cmd =  if L.null cmd' then Nothing else Just $ func $ head cmd' where
-    cmd' = filter (\c -> (name c) == cmd) cmds
+makeContext c = '@' : c
 
 unknowcmd c = "WTF is: " ++ c
 -- -- -- --  -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -285,39 +281,6 @@ oneREPloop = do c <- lift $ getInputLine prompt
         parsedinp c = case parseOnly parseInput (B.pack c) of
             (Right (cmd, args)) -> (maybe (lift $ outputStrLn $ unknowcmd cmd) (($ args) . func) (getCmd cmd)) >> oneREPloop
             (Left error) -> (lift $ outputStrLn $ unknowcmd c) >> oneREPloop
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
