@@ -35,7 +35,6 @@ data Task = Task { priority  :: Maybe Priority,
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Parser for parsing various components |Task|
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-datetimeformat = "%Y-%m-%d %H:%M"
 
 parsePriority :: Parser Priority
 parsePriority = fmap pri
@@ -95,19 +94,6 @@ instance Show (Task) where
         ct      = L.intercalate " " $ map makeContext $ context t
         fmttime = formatTime defaultTimeLocale datetimeformat
 
--- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
--- Read |Task| from file
--- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-readTaskFile :: FilePath -> IO [Task]
--- TODO: Proper error handling required
-readTaskFile f = withFile f ReadMode helper where
-    helper h = do
-        bytes <- B.hGetContents h
-        let lines = B.lines bytes
-        return $ map getTask lines
-    getTask :: B.ByteString -> Task
-    getTask b = let getRight (Right t) = t
-                in getRight $ parseOnly parseTask b
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- REPL Commands
