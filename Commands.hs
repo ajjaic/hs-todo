@@ -1,8 +1,9 @@
 module Commands (
-    getCmd
+    Command(..),
+    getCmd,
+    cmdNames
 ) where
 
-import Task
 import Control.Monad.Trans.State.Lazy (StateT (..), get)
 import System.Console.Haskeline (InputT (..), outputStrLn)
 import Text.Printf (printf)
@@ -10,9 +11,17 @@ import Control.Monad.Trans.Class (lift)
 import qualified Data.IntMap.Lazy as M
 import qualified Data.List as L
 
+import Task
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- REPL Commands
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+-- Type for |Command|
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+data Command = Command {name :: String,
+                        func :: Maybe String -> StateT Sessionstate (InputT IO) (),
+                        desc :: String}
 
 cmds = [Command   "ls"     listTasks      "List all the tasks",
         Command   "lsp"    listProjects   "List all the projects",
@@ -31,6 +40,7 @@ getCmd c = if L.null cmds' then Nothing else Just (head cmds') where
     cmds' = filter helper cmds
     helper cmd = c == (name cmd)
 
+cmdNames = map name cmds
 {-deleteTask  = undefined                                                                                                     -}
 {-appTask     = undefined                                                                                                     -}
 

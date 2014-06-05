@@ -1,7 +1,6 @@
 module Task (
     Sessionstate(..),
     Task(..),
-    Command(..),
     lsProjects,
     lsContexts,
     lsProjectsM,
@@ -12,7 +11,7 @@ module Task (
     insertTaskIntoMap,
     deleteTaskFromMap,
     allTasksWithProject,
-    {-allTasksWithContext,-}
+    allTasksWithContext,
     allTasksWithPriority
 ) where
 
@@ -23,8 +22,8 @@ import Control.Applicative (optional, (<*>), (<*), (*>), (<$>), (<|>))
 import Data.Attoparsec.Combinator (count, choice, sepBy1, sepBy', many1, many')
 import Data.Attoparsec.ByteString.Char8 (char, satisfy, inClass, Parser, digit, space, notInClass, letter_ascii, anyChar)
 import Data.Maybe (maybe, catMaybes, isJust)
-import Control.Monad.Trans.State.Lazy (StateT (..))
-import System.Console.Haskeline (InputT (..))
+import Control.Monad.Trans.State.Lazy (StateT(..))
+import System.Console.Haskeline (InputT(..))
 import qualified Data.List as L
 import qualified Data.IntMap.Lazy as M
 
@@ -32,36 +31,37 @@ import qualified Data.IntMap.Lazy as M
 -- |Task| type
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-type Project = Maybe String
-type Context = [String]
-type Priority = Maybe Char
-data Task = Task { getTimeadded :: UTCTime,
-                   getTimedone  :: Maybe UTCTime,
-                   getTask      :: String,
-                   getProject   :: Project,
-                   getContext   :: Context,
-                   getPriority  :: Priority }
+type Project  = String
+type Context  = String
+type Contexts = [String]
+type Priority = Char
+data Task     = Task { getTimeadded :: UTCTime,
+                       getTimedone  :: Maybe UTCTime,
+                       getTask      :: String,
+                       getProject   :: Maybe Project,
+                       getContext   :: Contexts,
+                       getPriority  :: Maybe Priority }
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Parsers for parsing various components |Task|
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 dateTimeFormat = "%Y-%m-%d %H:%M"
 
-parsePriority :: Parser Priority
+parsePriority :: Parser (Maybe Priority)
 parsePriority = optional $ (char '$' *> satisfy (inClass "ABCabc"))
 
 parseDate :: Parser UTCTime
 parseDate = (readTime defaultTimeLocale dateTimeFormat)
         <$> (count 16 $ choice [digit, char '-', char ':', space])
 
-parseProject :: Parser Project
+parseProject :: Parser (Maybe Project)
 parseProject = optional $ (char '+' *> many1 (letter_ascii <|> digit))
 
 parseContent :: Parser String
 parseContent  = L.intercalate " " <$> sepBy1 parseWord space where
     parseWord = many1 (satisfy (notInClass "+@$ "))
 
-parseContext :: Parser Context
+parseContext :: Parser Contexts
 parseContext = sepBy' context space where
     context  = char '@' *> many1 (letter_ascii <|> digit)
 
@@ -97,13 +97,6 @@ instance Show (Task) where
         telements   = createtime:donetime:taskcontent:project:context:priority:[]
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
--- Type for |Command|
--- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-data Command = Command {name :: String,
-                        func :: Maybe String -> StateT Sessionstate (InputT IO) (),
-                        desc :: String}
-
--- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- |Taskadd| type. Type that is used while adding a new task inside
 -- REPL. The parser for this type parses plain text to create this
 -- type.
@@ -111,7 +104,7 @@ data Command = Command {name :: String,
 data Taskadd = Taskadd { tatask     :: String,
                          taproject  :: Maybe String,
                          tacontext  :: [String],
-                         tapriority :: Priority}
+                         tapriority :: Maybe Priority}
 
 parseTaskAdd :: Parser Taskadd
 parseTaskAdd = Taskadd
@@ -156,16 +149,14 @@ deleteTaskFromMap tm key = M.delete key tm
 
 allTasksWithProject :: M.IntMap Task -> Project -> [Task]
 allTasksWithProject tm p = filter helper $ M.elems tm where
-    helper = ((==p) . getProject)
+    helper = ((==(Just p)) . getProject)
 
-{-allTasksWithContext :: M.IntMap Task -> Context -> [Task]  -}
-{-allTasksWithContext tm c = filter helper $ M.elems tm where-}
-{-    helper = (c `elem`) . getContext                       -}
+allTasksWithContext :: M.IntMap Task -> Context -> [Task]
+allTasksWithContext tm c = filter helper $ M.elems tm where
+    helper t = (c `elem`) $ getContext t
 
 allTasksWithPriority :: M.IntMap Task -> Priority -> [Task]
 allTasksWithPriority tm pr = filter helper $ M.elems tm where
-    helper t = (==pr) $ getPriority t
-    {-helper t = if isJust (prr t) then ((prr t)==pr) else False-}
-    {-prr t = getPriority t                                     -}
+    helper t = (==(Just pr)) $ getPriority t
 
 
