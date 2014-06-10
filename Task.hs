@@ -31,16 +31,15 @@ import qualified Data.IntMap.Lazy as M
 -- |Task| type
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-type Project  = String
-type Context  = String
-type Contexts = [String]
+type Project = String
+type Context = String
 type Priority = Char
-data Task     = Task { getTimeadded :: UTCTime,
-                       getTimedone  :: Maybe UTCTime,
-                       getTask      :: String,
-                       getProject   :: Maybe Project,
-                       getContext   :: Contexts,
-                       getPriority  :: Maybe Priority }
+data Task = Task { getTimeadded :: UTCTime,
+                   getTimedone  :: Maybe UTCTime,
+                   getTask      :: String,
+                   getProject   :: Maybe Project,
+                   getContext   :: [Context],
+                   getPriority  :: Maybe Priority }
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Parsers for parsing various components |Task|
@@ -61,7 +60,7 @@ parseContent :: Parser String
 parseContent  = L.intercalate " " <$> sepBy1 parseWord space where
     parseWord = many1 (satisfy (notInClass "+@$ "))
 
-parseContext :: Parser Contexts
+parseContext :: Parser [Context]
 parseContext = sepBy' context space where
     context  = char '@' *> many1 (letter_ascii <|> digit)
 
@@ -102,7 +101,7 @@ instance Show (Task) where
 -- type.
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 data Taskadd = Taskadd { tatask     :: String,
-                         taproject  :: Maybe String,
+                         taproject  :: Maybe Project,
                          tacontext  :: [String],
                          tapriority :: Maybe Priority}
 
@@ -120,8 +119,8 @@ parseTaskAdd = Taskadd
 -- TODO:Perhaps it would be better if we can have a seperate session
 -- field to store the tasks as a list as well.
 data Sessionstate = Sessionstate { sessionTasks    :: M.IntMap Task,
-                                   sessionProjects :: [String],
-                                   sessionContexts :: [String]} deriving (Show)
+                                   sessionProjects :: [Project],
+                                   sessionContexts :: [Context]}
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Internal API
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -153,10 +152,8 @@ allTasksWithProject tm p = filter helper $ M.elems tm where
 
 allTasksWithContext :: M.IntMap Task -> Context -> [Task]
 allTasksWithContext tm c = filter helper $ M.elems tm where
-    helper t = (c `elem`) $ getContext t
+    helper = (c `elem`) . getContext
 
 allTasksWithPriority :: M.IntMap Task -> Priority -> [Task]
 allTasksWithPriority tm pr = filter helper $ M.elems tm where
     helper t = (==(Just pr)) $ getPriority t
-
-

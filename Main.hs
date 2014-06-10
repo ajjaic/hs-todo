@@ -42,22 +42,9 @@ oneREPloop = do c <- lift $ getInputLine prompt
                     Just cmdargs -> parsedinp cmdargs
     where
         parsedinp c = case parseOnly parseInput (B.pack c) of
-            (Right (cmd, args)) -> (maybe (lift $ outputStrLn $ unknowncmd cmd) (($ args) . func) (getCmd cmd)) >> (return Continue)
-            (Left error) -> (lift $ outputStrLn $ unknowncmd c) >> (return Continue)
-
-
-{-oneREPloop :: StateT Sessionstate (InputT IO) ()-}
-{-oneREPloop = do c <- lift $ getInputLine prompt-}
-                {-case c of-}
-                    {-Nothing      -> return ()-}
-                    {-Just ""      -> oneREPloop-}
-                    {-Just "quit"  -> return ()-}
-                    {-Just "exit"  -> return ()-}
-                    {-Just cmdargs -> parsedinp cmdargs-}
-    {-where-}
-        {-parsedinp c = case parseOnly parseInput (B.pack c) of-}
-            {-(Right (cmd, args)) -> (maybe (lift $ outputStrLn $ unknowncmd cmd) (($ args) . func) (getCmd cmd)) >> oneREPloop-}
-            {-(Left error) -> (lift $ outputStrLn $ unknowncmd c) >> oneREPloop-}
+            (Right (cmd, args)) -> (maybe (cmderror cmd) (($ args) . func) (getCmd cmd)) >> oneREPloop
+            (Left error)        -> cmderror c >> oneREPloop
+        cmderror cmd = (lift $ outputStrLn $ unknowncmd cmd)
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Read |Task| from file
@@ -75,19 +62,7 @@ readTaskFile f = withFile f ReadMode helper where
 unknowncmd c = "WTF is: " ++ c
 
 todoFile :: String
-todoFile = "todo.txt"
+todoFile = "todoapi.txt"
 
 prompt :: String
-prompt = ">> "
-
-customcompletion = completeWord Nothing [' '] completions where
-    completions str = return $ map simpleCompletion $ filter (isPrefixOf str) cmdNames
-
-lineeditingsettings = setComplete customcompletion defaultSettings
-demo :: IO ()
-demo = runInputT lineeditingsettings $ do
-    getInputLine ""
-    getInputLine ""
-    getInputLine ""
-    getInputLine ""
-    return ()
+prompt = ":: "
