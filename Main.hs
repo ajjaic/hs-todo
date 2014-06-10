@@ -31,8 +31,9 @@ oneREPloop = do c <- lift $ getInputLine prompt
                     Just cmdargs -> parsedinp cmdargs
     where
         parsedinp c = case parseOnly parseInput (B.pack c) of
-            (Right (cmd, args)) -> (maybe (lift $ outputStrLn $ unknowncmd cmd) (($ args) . func) (getCmd cmd)) >> oneREPloop
-            (Left error) -> (lift $ outputStrLn $ unknowncmd c) >> oneREPloop
+            (Right (cmd, args)) -> (maybe (cmderror cmd) (($ args) . func) (getCmd cmd)) >> oneREPloop
+            (Left error)        -> cmderror c >> oneREPloop
+        cmderror cmd = (lift $ outputStrLn $ unknowncmd cmd)
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Read |Task| from file
@@ -50,7 +51,7 @@ readTaskFile f = withFile f ReadMode helper where
 unknowncmd c = "WTF is: " ++ c
 
 todoFile :: String
-todoFile = "todo.txt"
+todoFile = "todoapi.txt"
 
 prompt :: String
-prompt = ">> "
+prompt = ":: "

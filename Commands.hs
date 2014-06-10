@@ -96,20 +96,22 @@ getCmd c = if L.null cmds' then Nothing else Just (head cmds') where
 {-           projectView (Just $ last p)                                                                                      -}
 
 listTasks :: Maybe String -> StateT Sessionstate (InputT IO) ()
-listTasks _ = do
+listTasks Nothing = do
     ss <- get
     let tasksascending = M.assocs (M.map show $ sessionTasks ss)
-        printstrs = map (uncurry (printf "%3d -> %s")) tasksascending
+        printstrs      = map (uncurry (printf "%3d -> %s")) tasksascending
     lift $ mapM_ outputStrLn printstrs
 
-listProjects = undefined
-listContexts = undefined
-{-listProjects :: Maybe String -> StateT Sessionstate (InputT IO) ()-}
-{-listProjects _ = do                                               -}
-{-    ss <- get                                                     -}
-{-    lift $ mapM_ (outputStrLn . makeProject) $ projects ss        -}
+listProjects :: Maybe String -> StateT Sessionstate (InputT IO) ()
+listProjects Nothing = do
+    ss <- get
+    let projects  = zip [1 .. ] (lsProjectsM $ sessionTasks ss) :: [(Int, String)]
+        printstrs = map (uncurry (printf "%3d -> %s")) projects
+    lift $ mapM_ outputStrLn printstrs
 
-{-listContexts :: Maybe String -> StateT Sessionstate (InputT IO) ()-}
-{-listContexts _ = do                                               -}
-{-    ss <- get                                                     -}
-{-    lift $ mapM_ (outputStrLn . makeContext) $ contexts ss        -}
+listContexts :: Maybe String -> StateT Sessionstate (InputT IO) ()
+listContexts Nothing = do
+    ss <- get
+    let contexts  = zip [1 .. ] (lsContextsM $ sessionTasks ss) :: [(Int, String)]
+        printstrs = map (uncurry (printf "%3d -> %s")) contexts
+    lift $ mapM_ outputStrLn printstrs

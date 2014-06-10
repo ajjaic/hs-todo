@@ -165,5 +165,3 @@ allTasksWithContext tm c = filter helper $ M.elems tm where
 allTasksWithPriority :: M.IntMap Task -> Priority -> [Task]
 allTasksWithPriority tm pr = filter helper $ M.elems tm where
     helper t = (==(Just pr)) $ getPriority t
-
-
