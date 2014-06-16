@@ -4,8 +4,8 @@ module Commands (
     cmdNames
 ) where
 
-import Control.Monad.Trans.State.Lazy (StateT (..), get)
-import System.Console.Haskeline (InputT (..), outputStrLn)
+import Control.Monad.Trans.State.Strict (StateT, get)
+import System.Console.Haskeline (InputT, outputStrLn)
 import Text.Printf (printf)
 import Control.Monad.Trans.Class (lift)
 import qualified Data.IntMap.Lazy as M
@@ -20,33 +20,37 @@ import Task
 -- Type for |Command|
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 data Command = Command {name :: String,
-                        func :: Maybe String -> StateT Sessionstate (InputT IO) (),
+                        func :: Maybe String -> InputT (StateT Sessionstate IO) (),
                         desc :: String}
 
 cmds = [Command   "ls"     listTasks      "List all the tasks",
         Command   "lsp"    listProjects   "List all the projects",
-        Command   "lsc"    listContexts   "List all the contexts"
+        Command   "lsc"    listContexts   "List all the contexts",
+        Command   "pv"     projectView    "List all tasks projectwise",
+        Command   "cv"     contextView    "List all tasks contextwise",
+        Command   "h"      todoHelp       "Show this help",
+        Command   "at"     addTask        "Create a new task",
+        Command   "del"    deleteTask     "Delete an existing task",
+        Command   "app"    appTask        "Append to an existing task"
        ]
-{-        Command   "pv"     projectView    "List all tasks projectwise",                                                     -}
-{-        Command   "cv"     contextView    "List all tasks contextwise",                                                     -}
-{-        Command   "h"      todoHelp       "Show this help",                                                                 -}
-{-        Command   "at"     addTask        "Create a new task",                                                              -}
-{-        Command   "del"    deleteTask     "Delete an existing task",                                                        -}
-{-        Command   "app"    appTask        "Append to an existing task"                                                      -}
-{-       ]                                                                                                                    -}
 
 getCmd :: String -> Maybe Command
 getCmd c = if L.null cmds' then Nothing else Just (head cmds') where
     cmds' = filter helper cmds
     helper cmd = c == (name cmd)
 
+cmdNames :: [String]
 cmdNames = map name cmds
-{-deleteTask  = undefined                                                                                                     -}
-{-appTask     = undefined                                                                                                     -}
 
-{-todoHelp :: Maybe String -> StateT Sessionstate (InputT IO) ()                                                              -}
-{-todoHelp Nothing = lift $ mapM_ outputStrLn $ map (\c -> uncurry (printf "%3s: %s") (name c, desc c)) cmds                  -}
-{-todoHelp (Just c) = lift $ outputStrLn (maybe (unknowcmd c) desc (getCmd c))                                                -}
+projectView  = undefined
+contextView  = undefined
+addTask      = undefined
+deleteTask   = undefined
+appTask      = undefined
+
+todoHelp :: Maybe String -> InputT (StateT Sessionstate IO) ()
+todoHelp Nothing = mapM_ outputStrLn $ map (\c -> uncurry (printf "%3s -> %s") (name c, desc c)) cmds
+todoHelp (Just c) = outputStrLn (maybe (unknowncmd c) desc (getCmd c))
 
 {-addTask :: Maybe String -> StateT Sessionstate (InputT IO) ()                                                               -}
 {-addTask Nothing     = lift $ outputStrLn "Nothing to add"                                                                   -}
@@ -105,23 +109,24 @@ cmdNames = map name cmds
 {-           mapM_ (\mp -> projectView mp >> (lift $ outputStrLn "")) (map Just (init p))                                     -}
 {-           projectView (Just $ last p)                                                                                      -}
 
-listTasks :: Maybe String -> StateT Sessionstate (InputT IO) ()
-listTasks Nothing = do
-    ss <- get
-    let tasksascending = M.assocs (M.map show $ sessionTasks ss)
-        printstrs      = map (uncurry (printf "%3d -> %s")) tasksascending
-    lift $ mapM_ outputStrLn printstrs
 
-listProjects :: Maybe String -> StateT Sessionstate (InputT IO) ()
-listProjects Nothing = do
-    ss <- get
-    let projects  = zip [1 .. ] (lsProjectsM $ sessionTasks ss) :: [(Int, String)]
-        printstrs = map (uncurry (printf "%3d -> %s")) projects
-    lift $ mapM_ outputStrLn printstrs
-
-listContexts :: Maybe String -> StateT Sessionstate (InputT IO) ()
+listContexts :: Maybe String -> InputT (StateT Sessionstate IO) ()
 listContexts Nothing = do
-    ss <- get
+    ss <- lift get
     let contexts  = zip [1 .. ] (lsContextsM $ sessionTasks ss) :: [(Int, String)]
         printstrs = map (uncurry (printf "%3d -> %s")) contexts
-    lift $ mapM_ outputStrLn printstrs
+    mapM_ outputStrLn printstrs
+
+listProjects :: Maybe String -> InputT (StateT Sessionstate IO) ()
+listProjects Nothing = do
+    ss <- lift get
+    let projects  = zip [1 .. ] (lsProjectsM $ sessionTasks ss) :: [(Int, String)]
+        printstrs = map (uncurry (printf "%3d -> %s")) projects
+    mapM_ outputStrLn printstrs
+
+listTasks :: Maybe String -> InputT (StateT Sessionstate IO) ()
+listTasks Nothing = do
+    ss <- lift get
+    let tasksascending = M.assocs (M.map show $ sessionTasks ss)
+        printstrs      = map (uncurry (printf "%3d -> %s")) tasksascending
+    mapM_ outputStrLn printstrs

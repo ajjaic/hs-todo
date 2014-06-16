@@ -1,6 +1,7 @@
 module Task (
     Sessionstate(..),
     Task(..),
+    unknowncmd,
     lsProjects,
     lsContexts,
     lsProjectsM,
@@ -20,10 +21,8 @@ import Data.Time.Format (formatTime, readTime)
 import System.Locale (defaultTimeLocale)
 import Control.Applicative (optional, (<*>), (<*), (*>), (<$>), (<|>))
 import Data.Attoparsec.Combinator (count, choice, sepBy1, sepBy', many1, many')
-import Data.Attoparsec.ByteString.Char8 (char, satisfy, inClass, Parser, digit, space, notInClass, letter_ascii, anyChar)
-import Data.Maybe (maybe, catMaybes, isJust)
-import Control.Monad.Trans.State.Lazy (StateT(..))
-import System.Console.Haskeline (InputT(..))
+import Data.Attoparsec.ByteString.Char8 (Parser, char, satisfy, inClass, digit, space, notInClass, letter_ascii, anyChar)
+import Data.Maybe (maybe, catMaybes)
 import qualified Data.List as L
 import qualified Data.IntMap.Lazy as M
 
@@ -120,7 +119,8 @@ parseTaskAdd = Taskadd
 -- field to store the tasks as a list as well.
 data Sessionstate = Sessionstate { sessionTasks    :: M.IntMap Task,
                                    sessionProjects :: [Project],
-                                   sessionContexts :: [Context]}
+                                   sessionContexts :: [Context],
+                                   sessionAutocomp :: [String]}
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Internal API
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -157,3 +157,6 @@ allTasksWithContext tm c = filter helper $ M.elems tm where
 allTasksWithPriority :: M.IntMap Task -> Priority -> [Task]
 allTasksWithPriority tm pr = filter helper $ M.elems tm where
     helper t = (==(Just pr)) $ getPriority t
+
+unknowncmd c = "WTF is: " ++ c
+
