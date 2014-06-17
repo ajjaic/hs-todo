@@ -5,7 +5,7 @@ import System.IO.Error (tryIOError, ioError)
 import Data.Attoparsec.ByteString.Char8 (parseOnly)
 import Data.List (isPrefixOf)
 import System.Console.Haskeline (InputT, runInputT, defaultSettings, getInputLine, outputStrLn, setComplete)
-import System.Console.Haskeline.Completion (simpleCompletion, completeWord, Completion, CompletionFunc)
+import System.Console.Haskeline.Completion (simpleCompletion, completeWord, Completion(Completion), CompletionFunc)
 import qualified Data.ByteString.Char8 as B
 
 import Task
@@ -19,7 +19,7 @@ main = do
             let taskmap  = toMap tasks
                 projects = lsProjects tasks
                 contexts = lsContexts tasks
-                ss       = Sessionstate taskmap projects contexts cmdNames
+                ss       = Sessionstate taskmap projects contexts (cmdNames ++ projects ++ contexts)
             evalStateT (runInputT (setComplete autocomp defaultSettings) oneREPloop) ss
 
 oneREPloop :: InputT (StateT Sessionstate IO) ()
@@ -51,12 +51,13 @@ readTaskFile f = withFile f ReadMode helper where
 -- Autocomplete function
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 autocomp :: CompletionFunc (StateT Sessionstate IO)
-autocomp = completeWord Nothing [' ', '\n'] autocomp' where
+autocomp = completeWord Nothing [' '] autocomp' where
+    noendspace str = Completion str str False
     autocomp' :: String -> (StateT Sessionstate IO) [Completion]
     autocomp' s = do
         ss <- get
         let st = sessionAutocomp ss
-        return $ map simpleCompletion $ filter (s `isPrefixOf`) st
+        return $ map noendspace $ filter (s `isPrefixOf`) st
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Hardcoded Settings

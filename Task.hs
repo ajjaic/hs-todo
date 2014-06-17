@@ -26,6 +26,7 @@ import Data.Maybe (maybe, catMaybes)
 import qualified Data.List as L
 import qualified Data.IntMap.Lazy as M
 
+import Debug.Trace
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- |Task| type
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -146,17 +147,17 @@ insertTaskIntoMap t tm = M.insert key t tm where
 deleteTaskFromMap :: M.IntMap Task -> Int -> M.IntMap Task
 deleteTaskFromMap tm key = M.delete key tm
 
-allTasksWithProject :: M.IntMap Task -> Project -> [Task]
-allTasksWithProject tm p = filter helper $ M.elems tm where
-    helper = ((==(Just p)) . getProject)
+allTasksWithProject :: M.IntMap Task -> Maybe Project -> M.IntMap Task
+allTasksWithProject tm Nothing = M.filter (( == Nothing) . getProject) tm
+allTasksWithProject tm p       = M.filter (( == p) . getProject) tm
 
-allTasksWithContext :: M.IntMap Task -> Context -> [Task]
-allTasksWithContext tm c = filter helper $ M.elems tm where
-    helper = (c `elem`) . getContext
+allTasksWithContext :: M.IntMap Task -> Maybe Context -> M.IntMap Task
+allTasksWithContext tm Nothing  = M.filter (L.null . getContext) tm
+allTasksWithContext tm (Just c) = M.filter ((c `elem`) . getContext) tm
 
-allTasksWithPriority :: M.IntMap Task -> Priority -> [Task]
-allTasksWithPriority tm pr = filter helper $ M.elems tm where
-    helper t = (==(Just pr)) $ getPriority t
+allTasksWithPriority :: M.IntMap Task -> Maybe Priority -> M.IntMap Task
+allTasksWithPriority tm Nothing = M.filter (( == Nothing) . getPriority) tm
+allTasksWithPriority tm pr      = M.filter (( == pr) . getPriority) tm
 
 unknowncmd c = "WTF is: " ++ c
 

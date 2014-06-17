@@ -12,6 +12,7 @@ import qualified Data.IntMap.Lazy as M
 import qualified Data.List as L
 
 import Task
+import Debug.Trace
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- REPL Commands
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -42,8 +43,6 @@ getCmd c = if L.null cmds' then Nothing else Just (head cmds') where
 cmdNames :: [String]
 cmdNames = map name cmds
 
-projectView  = undefined
-contextView  = undefined
 addTask      = undefined
 deleteTask   = undefined
 appTask      = undefined
@@ -72,61 +71,68 @@ todoHelp (Just c) = outputStrLn (maybe (unknowncmd c) desc (getCmd c))
 {-        (Left l) -> lift $ outputStrLn l                                                                                    -}
 
 
-{-contextView :: Maybe String -> StateT Sessionstate (InputT IO) ()                                                           -}
-{-contextView (Just c) = do                                                                                                   -}
-{-    ss <- get                                                                                                               -}
-{-    let t = M.elems $ tasks ss                                                                                              -}
-{-        ctxt = filter ((any (==c)) . context) t                                                                             -}
-{-    if L.null ctxt                                                                                                          -}
-{-        then return ()                                                                                                      -}
-{-        else do lift $ outputStrLn (makeContext c)                                                                          -}
-{-                    >> mapM_ (outputStrLn . show) ctxt                                                                      -}
-{-contextView _ = do                                                                                                          -}
-{-    ss <- get                                                                                                               -}
-{-    let c = contexts ss                                                                                                     -}
-{-    if L.null c                                                                                                             -}
-{-        then return ()                                                                                                      -}
-{-        else do                                                                                                             -}
-{-            mapM_ (\mc -> contextView mc >> (lift $ outputStrLn "")) (map Just (init c))                                    -}
-{-            contextView (Just $ last c)                                                                                     -}
+contextView :: Maybe String -> InputT (StateT Sessionstate IO) ()
+contextView Nothing = do
+    ss <- lift get
+    let c = sessionContexts ss
+    if L.null c
+        then return ()
+        else do
+            mapM_ (\mc -> contextView mc >> outputStrLn "") (map Just (init c))
+            contextView (Just $ last c)
+contextView ctx@(Just c) = do
+    ss <- lift get
+    let t = M.toAscList $ M.map show $ allTasksWithContext (sessionTasks ss) ctx
+        printtasks = map commandViewFormat t
+    if L.null t
+        then return ()
+        else do outputStrLn (makeContext c) >> mapM_ outputStrLn printtasks
 
-
-{-projectView :: Maybe String -> StateT Sessionstate (InputT IO) ()                                                           -}
-{-projectView prj@(Just p) = do                                                                                               -}
-{-    ss <- get                                                                                                               -}
-{-    let t    = M.elems $ tasks ss                                                                                           -}
-{-        prjt = filter ((==prj) . project) t                                                                                 -}
-{-    if L.null prjt                                                                                                          -}
-{-        then return ()                                                                                                      -}
-{-        else do lift $ outputStrLn (makeProject p)                                                                          -}
-{-                    >> mapM_ (outputStrLn . show) prjt                                                                      -}
-{-projectView _ = do                                                                                                          -}
-{-    ss <- get                                                                                                               -}
-{-    let p = projects ss                                                                                                     -}
-{-    if L.null p                                                                                                             -}
-{-        then return ()                                                                                                      -}
-{-        else do                                                                                                             -}
-{-           mapM_ (\mp -> projectView mp >> (lift $ outputStrLn "")) (map Just (init p))                                     -}
-{-           projectView (Just $ last p)                                                                                      -}
-
+projectView :: Maybe String -> InputT (StateT Sessionstate IO) ()
+projectView Nothing = do
+    ss <- lift get
+    let p = sessionProjects ss
+    if L.null p
+        then return ()
+        else do
+           mapM_ (\mp -> projectView mp >> outputStrLn "") (map Just (init p))
+           projectView (Just $ last p)
+projectView prj@(Just p) = do
+    ss <- lift get
+    let t          = M.toAscList $ M.map show $ allTasksWithProject (sessionTasks ss) prj
+        printtasks = map commandViewFormat t
+    if L.null t
+        then return ()
+        else outputStrLn (makeProject p) >> mapM_ outputStrLn printtasks
 
 listContexts :: Maybe String -> InputT (StateT Sessionstate IO) ()
 listContexts Nothing = do
     ss <- lift get
-    let contexts  = zip [1 .. ] (lsContextsM $ sessionTasks ss) :: [(Int, String)]
-        printstrs = map (uncurry (printf "%3d -> %s")) contexts
+    let contexts  = zip [1 .. ] (lsContextsM $ sessionTasks ss)
+        printstrs = map commandViewFormat contexts
     mapM_ outputStrLn printstrs
 
 listProjects :: Maybe String -> InputT (StateT Sessionstate IO) ()
 listProjects Nothing = do
     ss <- lift get
-    let projects  = zip [1 .. ] (lsProjectsM $ sessionTasks ss) :: [(Int, String)]
-        printstrs = map (uncurry (printf "%3d -> %s")) projects
+    let projects  = zip [1 .. ] (lsProjectsM $ sessionTasks ss)
+        printstrs = map commandViewFormat projects
     mapM_ outputStrLn printstrs
 
 listTasks :: Maybe String -> InputT (StateT Sessionstate IO) ()
 listTasks Nothing = do
     ss <- lift get
     let tasksascending = M.assocs (M.map show $ sessionTasks ss)
-        printstrs      = map (uncurry (printf "%3d -> %s")) tasksascending
+        printstrs      = map commandViewFormat tasksascending
     mapM_ outputStrLn printstrs
+
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+-- Internal API
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+commandViewFormat :: (Int, String) -> String
+commandViewFormat p = (uncurry (printf "%3d -> %s")) p
+
+makeProject p = '+':p
+
+makeContext c = '@':c
