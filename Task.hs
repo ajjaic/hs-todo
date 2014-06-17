@@ -1,6 +1,7 @@
 module Task (
     Sessionstate(..),
     Task(..),
+    Taskadd(..),
     unknowncmd,
     lsProjects,
     lsContexts,
@@ -8,6 +9,7 @@ module Task (
     lsContextsM,
     toMap,
     parseTask,
+    parseTaskAdd,
     parseInput,
     insertTaskIntoMap,
     deleteTaskFromMap,
@@ -26,7 +28,6 @@ import Data.Maybe (maybe, catMaybes)
 import qualified Data.List as L
 import qualified Data.IntMap.Lazy as M
 
-import Debug.Trace
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- |Task| type
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -100,10 +101,10 @@ instance Show (Task) where
 -- REPL. The parser for this type parses plain text to create this
 -- type.
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-data Taskadd = Taskadd { tatask     :: String,
-                         taproject  :: Maybe Project,
-                         tacontext  :: [String],
-                         tapriority :: Maybe Priority}
+data Taskadd = Taskadd { newContent  :: String,
+                         newProject  :: Maybe Project,
+                         newContext  :: [String],
+                         newPriority :: Maybe Priority}
 
 parseTaskAdd :: Parser Taskadd
 parseTaskAdd = Taskadd

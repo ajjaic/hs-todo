@@ -4,15 +4,19 @@ module Commands (
     cmdNames
 ) where
 
-import Control.Monad.Trans.State.Strict (StateT, get)
+import Data.Time.Clock (getCurrentTime)
+import Control.Monad.Trans.State.Strict (StateT, get, put)
 import System.Console.Haskeline (InputT, outputStrLn)
 import Text.Printf (printf)
 import Control.Monad.Trans.Class (lift)
+import Control.Monad.IO.Class (liftIO)
+import Data.Maybe (fromJust, isNothing)
+import Data.Attoparsec.ByteString.Char8 (parseOnly)
+import qualified Data.ByteString.Char8 as B
 import qualified Data.IntMap.Lazy as M
 import qualified Data.List as L
 
 import Task
-import Debug.Trace
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- REPL Commands
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -43,7 +47,6 @@ getCmd c = if L.null cmds' then Nothing else Just (head cmds') where
 cmdNames :: [String]
 cmdNames = map name cmds
 
-addTask      = undefined
 deleteTask   = undefined
 appTask      = undefined
 
@@ -51,24 +54,29 @@ todoHelp :: Maybe String -> InputT (StateT Sessionstate IO) ()
 todoHelp Nothing = mapM_ outputStrLn $ map (\c -> uncurry (printf "%3s -> %s") (name c, desc c)) cmds
 todoHelp (Just c) = outputStrLn (maybe (unknowncmd c) desc (getCmd c))
 
-{-addTask :: Maybe String -> StateT Sessionstate (InputT IO) ()                                                               -}
-{-addTask Nothing     = lift $ outputStrLn "Nothing to add"                                                                   -}
-{-addTask (Just xtsk) = do                                                                                                    -}
-{-    case parseOnly parseTaskAdd (B.pack xtsk) of                                                                            -}
-{-        (Right r) -> do                                                                                                     -}
-{-            utc <- lift $ liftIO getCurrentTime                                                                             -}
-{-            ss  <- get                                                                                                      -}
-{-            let newpriority    = tapriority r                                                                               -}
-{-                newtaskcontent = tatask r                                                                                   -}
-{-                newproject     = taproject r                                                                                -}
-{-                newcontexts    = tacontext r                                                                                -}
-{-                newtask        = Task newpriority utc Nothing newtaskcontent newproject newcontexts                         -}
-{-                newtaskset     = M.insert 1 newtask $ M.mapKeys (+1) (tasks ss)                                             -}
-{-                newprojectset  = if isNothing newproject then (projects ss) else L.union (projects ss) [fromJust newproject]-}
-{-                newcontextset  = if L.null newcontexts then (contexts ss) else L.union (contexts ss) newcontexts            -}
-{-                newss          = Sessionstate newtaskset newprojectset newcontextset                                        -}
-{-            put newss                                                                                                       -}
-{-        (Left l) -> lift $ outputStrLn l                                                                                    -}
+addTask :: Maybe String -> InputT (StateT Sessionstate IO) ()
+addTask Nothing     = outputStrLn "Nothing to add"
+addTask (Just newtask) = do
+    case parseOnly parseTaskAdd (B.pack newtask) of
+        (Right r) -> do
+            utc <- liftIO getCurrentTime
+            ss  <- lift get
+            let content = newContent r
+                project = newProject r
+                contexts = newContext r
+                priority = newPriority r
+                task = Task utc Nothing content project contexts priority
+                newtaskset = if M.member 1 (sessionTasks ss)
+                                then M.insert 1 task $ M.mapKeys (+1) (sessionTasks ss)
+                                else M.insert 1 task (sessionTasks ss)
+                newprojectset = if isNothing project then (sessionProjects ss) else L.union (sessionProjects ss) [fromJust project]
+                newcontextset = if L.null contexts then (sessionContexts ss) else L.union (sessionContexts ss) contexts
+                newautocomptags = let ac = sessionAutocomp ss
+                                      tags = if isNothing project then contexts else (fromJust project):contexts
+                                   in L.union ac tags
+                newss = Sessionstate newtaskset newprojectset newcontextset newautocomptags
+            lift $ put newss
+        (Left l) -> outputStrLn l
 
 
 contextView :: Maybe String -> InputT (StateT Sessionstate IO) ()
