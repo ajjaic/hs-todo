@@ -28,15 +28,14 @@ data Command = Command {name :: String,
                         func :: Maybe String -> InputT (StateT Sessionstate IO) (),
                         desc :: String}
 
-cmds = [Command   "ls"     listTasks      "List all the tasks",
+cmds = [Command   "ls"     listTasks      "ls [task search]. List all the tasks",
         Command   "lsp"    listProjects   "List all the projects",
         Command   "lsc"    listContexts   "List all the contexts",
-        Command   "pv"     projectView    "List all tasks projectwise",
-        Command   "cv"     contextView    "List all tasks contextwise",
+        Command   "pv"     projectView    "pv [project name]. List all tasks projectwise",
+        Command   "cv"     contextView    "cv [context name]. List all tasks contextwise",
         Command   "h"      todoHelp       "Show this help",
-        Command   "at"     addTask        "Create a new task",
-        Command   "del"    deleteTask     "Delete an existing task",
-        Command   "app"    appTask        "Append to an existing task"
+        Command   "at"     addTask        "at <text> [+project] [@context..] [$priority]. Create a new task. The priority can either be A, B or C",
+        Command   "del"    deleteTask     "del <task number>. Delete an existing task",
        ]
 
 getCmd :: String -> Maybe Command
@@ -147,6 +146,7 @@ listTasks Nothing = do
     let tasksascending = M.assocs (M.map show $ sessionTasks ss)
         printstrs      = map commandViewFormat tasksascending
     mapM_ outputStrLn printstrs
+--TODO: make tasks searcheable
 listTasks _ = return ()
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
