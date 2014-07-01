@@ -47,31 +47,43 @@ getCmd c = if L.null cmds' then Nothing else Just (head cmds') where
 cmdNames :: [String]
 cmdNames = map name cmds
 
-deleteTask   = undefined
 appTask      = undefined
 
 todoHelp :: Maybe String -> InputT (StateT Sessionstate IO) ()
-todoHelp Nothing = mapM_ outputStrLn $ map (\c -> uncurry (printf "%3s -> %s") (name c, desc c)) cmds
+todoHelp Nothing  = mapM_ outputStrLn $ map (\c -> uncurry (printf "%3s -> %s") (name c, desc c)) cmds
 todoHelp (Just c) = outputStrLn (maybe (unknowncmd c) desc (getCmd c))
 
+deleteTask :: Maybe String -> InputT (StateT Sessionstate IO) ()
+deleteTask Nothing  = return ()
+deleteTask (Just n) = do
+    ss <- lift get
+    let intn          = (read n) :: Int
+        taskset       = sessionTasks ss
+        newtaskset    = deleteTaskFromMap taskset intn
+        newprojectset = lsProjectsM newtaskset
+        newcontextset = lsContextsM newtaskset
+        newss         = ss {sessionTasks = newtaskset, sessionProjects = newprojectset, sessionContexts = newcontextset}
+    if not $ M.member intn taskset
+        then outputStrLn $ programerror "The task does not exist"
+        else lift (put newss)
+
+
 addTask :: Maybe String -> InputT (StateT Sessionstate IO) ()
-addTask Nothing     = outputStrLn "Nothing to add"
+addTask Nothing     = return ()
 addTask (Just newtask) = do
     case parseOnly parseTaskAdd (B.pack newtask) of
         (Right r) -> do
             utc <- liftIO getCurrentTime
             ss  <- lift get
-            let content = newContent r
-                project = newProject r
-                contexts = newContext r
-                priority = newPriority r
-                task = Task utc Nothing content project contexts priority
-                newtaskset = if M.member 1 (sessionTasks ss)
-                                then M.insert 1 task $ M.mapKeys (+1) (sessionTasks ss)
-                                else M.insert 1 task (sessionTasks ss)
-                newprojectset = if isNothing project then (sessionProjects ss) else L.union (sessionProjects ss) [fromJust project]
-                newcontextset = if L.null contexts then (sessionContexts ss) else L.union (sessionContexts ss) contexts
-                newautocomptags = let ac = sessionAutocomp ss
+            let content         = newContent r
+                project         = newProject r
+                contexts        = newContext r
+                priority        = newPriority r
+                task            = Task utc Nothing content project contexts priority
+                newtaskset      = if M.member 1 (sessionTasks ss) then M.insert 1 task $ M.mapKeys (+1) (sessionTasks ss) else M.insert 1 task (sessionTasks ss)
+                newprojectset   = if isNothing project then (sessionProjects ss) else L.union (sessionProjects ss) [fromJust project]
+                newcontextset   = if L.null contexts then (sessionContexts ss) else L.union (sessionContexts ss) contexts
+                newautocomptags = let ac   = sessionAutocomp ss
                                       tags = if isNothing project then contexts else (fromJust project):contexts
                                    in L.union ac tags
                 newss = Sessionstate newtaskset newprojectset newcontextset newautocomptags
@@ -119,6 +131,7 @@ listContexts Nothing = do
     let contexts  = zip [1 .. ] (lsContextsM $ sessionTasks ss)
         printstrs = map commandViewFormat contexts
     mapM_ outputStrLn printstrs
+listContexts _ = return ()
 
 listProjects :: Maybe String -> InputT (StateT Sessionstate IO) ()
 listProjects Nothing = do
@@ -126,6 +139,7 @@ listProjects Nothing = do
     let projects  = zip [1 .. ] (lsProjectsM $ sessionTasks ss)
         printstrs = map commandViewFormat projects
     mapM_ outputStrLn printstrs
+listProjects _ = return ()
 
 listTasks :: Maybe String -> InputT (StateT Sessionstate IO) ()
 listTasks Nothing = do
@@ -133,6 +147,7 @@ listTasks Nothing = do
     let tasksascending = M.assocs (M.map show $ sessionTasks ss)
         printstrs      = map commandViewFormat tasksascending
     mapM_ outputStrLn printstrs
+listTasks _ = return ()
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Internal API

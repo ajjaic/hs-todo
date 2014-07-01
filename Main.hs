@@ -32,7 +32,7 @@ oneREPloop = do
         Just ""      -> oneREPloop
         Just cmdargs -> parseinp cmdargs
     where
-        cmderror err = outputStrLn $ unknowncmd err
+        cmderror err = outputStrLn $ programerror err
         parseinp c   = case parseOnly parseInput (B.pack c) of
             (Right (cmd, args)) -> (maybe (cmderror cmd) (($ args) . func) (getCmd cmd)) >> oneREPloop
             (Left _) -> cmderror c

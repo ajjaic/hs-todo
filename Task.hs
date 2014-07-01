@@ -3,6 +3,8 @@ module Task (
     Task(..),
     Taskadd(..),
     unknowncmd,
+    programerror,
+    info,
     lsProjects,
     lsContexts,
     lsProjectsM,
@@ -126,16 +128,16 @@ data Sessionstate = Sessionstate { sessionTasks    :: M.IntMap Task,
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Internal API
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-lsProjects :: [Task] -> [String]
+lsProjects :: [Task] -> [Project]
 lsProjects t = L.nub $ catMaybes $ map getProject t
 
-lsContexts :: [Task] -> [String]
+lsContexts :: [Task] -> [Context]
 lsContexts t = L.nub $ concat $ map getContext t
 
-lsProjectsM :: M.IntMap Task -> [String]
+lsProjectsM :: M.IntMap Task -> [Project]
 lsProjectsM tm = L.nub $ catMaybes $ map getProject $ M.elems tm
 
-lsContextsM :: M.IntMap Task -> [String]
+lsContextsM :: M.IntMap Task -> [Context]
 lsContextsM tm = L.nub $ concat $ map getContext $ M.elems tm
 
 toMap :: [Task] -> M.IntMap Task
@@ -160,5 +162,6 @@ allTasksWithPriority :: M.IntMap Task -> Maybe Priority -> M.IntMap Task
 allTasksWithPriority tm Nothing = M.filter (( == Nothing) . getPriority) tm
 allTasksWithPriority tm pr      = M.filter (( == pr) . getPriority) tm
 
-unknowncmd c = "WTF is: " ++ c
-
+unknowncmd   = (++) "Unknown: "
+programerror = (++) "Error: "
+info         = (++) "Info: "
