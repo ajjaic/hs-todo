@@ -9,7 +9,12 @@ module Task (
     lsContexts,
     lsProjectsM,
     lsContextsM,
+    prioritycolorA,
+    prioritycolorB,
+    prioritycolorC,
     toMap,
+    todoFile,
+    prompt,
     parseTask,
     parseTaskAdd,
     parseInput,
@@ -27,6 +32,8 @@ import Control.Applicative (optional, (<*>), (<*), (*>), (<$>), (<|>))
 import Data.Attoparsec.Combinator (count, choice, sepBy1, sepBy', many1, many')
 import Data.Attoparsec.ByteString.Char8 (Parser, char, satisfy, inClass, digit, space, notInClass, letter_ascii, anyChar)
 import Data.Maybe (maybe, catMaybes)
+import System.Console.Terminfo.Color (Color(..))
+import System.Console.Terminfo.Base (Terminal)
 import qualified Data.List as L
 import qualified Data.IntMap.Lazy as M
 
@@ -49,6 +56,7 @@ data Task = Task { getTimeadded :: UTCTime,
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 dateTimeFormat = "%Y-%m-%d %H:%M"
 
+--TODO: The only priorities must be changed to ABab. No Cc.
 parsePriority :: Parser (Maybe Priority)
 parsePriority = optional $ (char '$' *> satisfy (inClass "ABCabc"))
 
@@ -124,7 +132,8 @@ parseTaskAdd = Taskadd
 data Sessionstate = Sessionstate { sessionTasks    :: M.IntMap Task,
                                    sessionProjects :: [Project],
                                    sessionContexts :: [Context],
-                                   sessionAutocomp :: [String]}
+                                   sessionAutocomp :: [String],
+                                   sessionTerminal :: Maybe Terminal }
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Internal API
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -162,6 +171,20 @@ allTasksWithPriority :: M.IntMap Task -> Maybe Priority -> M.IntMap Task
 allTasksWithPriority tm Nothing = M.filter (( == Nothing) . getPriority) tm
 allTasksWithPriority tm pr      = M.filter (( == pr) . getPriority) tm
 
+
 unknowncmd   = (++) "Unknown: "
 programerror = (++) "Error: "
 info         = (++) "Info: "
+
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+-- Hardcoded Settings
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+todoFile :: String
+todoFile = "todoapi.txt"
+
+prompt :: String
+prompt = ":: "
+
+prioritycolorA = Red
+prioritycolorB = Yellow
+prioritycolorC = Blue

@@ -7,11 +7,14 @@ module Commands (
 import Data.Time.Clock (getCurrentTime)
 import Control.Monad.Trans.State.Strict (StateT, get, put)
 import System.Console.Haskeline (InputT, outputStrLn)
+import Control.Applicative (pure, (<*>))
 import Text.Printf (printf)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.IO.Class (liftIO)
-import Data.Maybe (fromJust, isNothing)
+import Data.Maybe (maybe, fromJust, isNothing)
 import Data.Attoparsec.ByteString.Char8 (parseOnly)
+import System.Console.Terminfo.Color (Color(..), withForegroundColor)
+import System.Console.Terminfo.Base (getCapability, runTermOutput, termText)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.IntMap.Lazy as M
 import qualified Data.List as L
@@ -35,7 +38,7 @@ cmds = [Command   "ls"     listTasks      "ls [task search]. List all the tasks"
         Command   "cv"     contextView    "cv [context name]. List all tasks contextwise",
         Command   "h"      todoHelp       "Show this help",
         Command   "at"     addTask        "at <text> [+project] [@context..] [$priority]. Create a new task. The priority can either be A, B or C",
-        Command   "del"    deleteTask     "del <task number>. Delete an existing task",
+        Command   "del"    deleteTask     "del <task number>. Delete an existing task"
        ]
 
 getCmd :: String -> Maybe Command
@@ -45,8 +48,6 @@ getCmd c = if L.null cmds' then Nothing else Just (head cmds') where
 
 cmdNames :: [String]
 cmdNames = map name cmds
-
-appTask      = undefined
 
 todoHelp :: Maybe String -> InputT (StateT Sessionstate IO) ()
 todoHelp Nothing  = mapM_ outputStrLn $ map (\c -> uncurry (printf "%3s -> %s") (name c, desc c)) cmds
@@ -85,10 +86,9 @@ addTask (Just newtask) = do
                 newautocomptags = let ac   = sessionAutocomp ss
                                       tags = if isNothing project then contexts else (fromJust project):contexts
                                    in L.union ac tags
-                newss = Sessionstate newtaskset newprojectset newcontextset newautocomptags
+                newss = ss {sessionTasks=newtaskset, sessionProjects=newprojectset, sessionContexts=newcontextset, sessionAutocomp=newautocomptags}
             lift $ put newss
-        (Left l) -> outputStrLn l
-
+        (Left l) -> outputStrLn (programerror l)
 
 contextView :: Maybe String -> InputT (StateT Sessionstate IO) ()
 contextView Nothing = do
@@ -145,17 +145,24 @@ listTasks Nothing = do
     ss <- lift get
     let tasksascending = M.assocs (M.map show $ sessionTasks ss)
         printstrs      = map commandViewFormat tasksascending
-    mapM_ outputStrLn printstrs
+    mapM_ applyColor printstrs
 --TODO: make tasks searcheable
 listTasks _ = return ()
+
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Internal API
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
+applyColor :: String -> InputT (StateT Sessionstate IO) ()
+applyColor s = do
+    ss <- lift get
+    let terminal = sessionTerminal ss
+        capability = maybe (Just (termText s)) (\t -> getCapability t (withForegroundColor <*> pure prioritycolorA <*> pure (termText s))) (sessionTerminal ss)
+    liftIO $ runTermOutput (fromJust terminal) (fromJust capability)
+
 commandViewFormat :: (Int, String) -> String
 commandViewFormat p = (uncurry (printf "%3d -> %s")) p
 
 makeProject p = '+':p
-
 makeContext c = '@':c

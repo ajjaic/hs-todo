@@ -6,6 +6,9 @@ import Data.Attoparsec.ByteString.Char8 (parseOnly)
 import Data.List (isPrefixOf)
 import System.Console.Haskeline (InputT, runInputT, defaultSettings, getInputLine, outputStrLn, setComplete)
 import System.Console.Haskeline.Completion (simpleCompletion, completeWord, Completion(Completion), CompletionFunc)
+import System.Console.Terminfo.Base (setupTermFromEnv, SetupTermError)
+import System.Console.Terminfo.Base (Terminal)
+import Control.Exception.Base (try)
 import qualified Data.ByteString.Char8 as B
 
 import Task
@@ -13,14 +16,31 @@ import Commands
 
 main :: IO ()
 main = do
-    eithererrortasks <- tryIOError (readTaskFile todoFile)
-    either ioError startrepl eithererrortasks where
-        startrepl tasks = do
-            let taskmap  = toMap tasks
-                projects = lsProjects tasks
-                contexts = lsContexts tasks
-                ss       = Sessionstate taskmap projects contexts (cmdNames ++ projects ++ contexts)
-            evalStateT (runInputT (setComplete autocomp defaultSettings) oneREPloop) ss
+    terminal <- try setupTermFromEnv :: IO (Either SetupTermError Terminal)
+    case terminal of
+        Left _ -> putStrLn (info "Color output not available") >> startwithterminal Nothing
+        Right t -> startwithterminal (Just t)
+    where
+        startwithterminal term = tryIOError (readTaskFile todoFile)
+                             >>= (\errOrTasks -> either ioError (startrepl term) errOrTasks)
+        startrepl term tasks = let taskmap  = toMap tasks
+                                   projects = lsProjects tasks
+                                   contexts = lsContexts tasks
+                                   ss       = Sessionstate taskmap projects contexts (cmdNames ++ projects ++ contexts) term
+                                in evalStateT (runInputT (setComplete autocomp defaultSettings) oneREPloop) ss
+
+
+    --case terminal of
+    --    Left  _ -> putStrLn (info "Color output not available")
+    --    Right t -> do
+    --        eithererrortasks <- tryIOError (readTaskFile todoFile)
+    --        either ioError startrepl eithererrortasks where
+    --            startrepl tasks = do
+    --                let taskmap  = toMap tasks
+    --                    projects = lsProjects tasks
+    --                    contexts = lsContexts tasks
+    --                    ss       = Sessionstate taskmap projects contexts (cmdNames ++ projects ++ contexts) t
+    --                evalStateT (runInputT (setComplete autocomp defaultSettings) oneREPloop) ss
 
 oneREPloop :: InputT (StateT Sessionstate IO) ()
 oneREPloop = do
@@ -59,11 +79,3 @@ autocomp = completeWord Nothing [' '] autocomp' where
         let st = sessionAutocomp ss
         return $ map noendspace $ filter (s `isPrefixOf`) st
 
--- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
--- Hardcoded Settings
--- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-todoFile :: String
-todoFile = "todoapi.txt"
-
-prompt :: String
-prompt = ":: "
