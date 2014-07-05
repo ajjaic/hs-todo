@@ -31,7 +31,7 @@ import System.Locale (defaultTimeLocale)
 import Control.Applicative (optional, (<*>), (<*), (*>), (<$>), (<|>))
 import Data.Attoparsec.Combinator (count, choice, sepBy1, sepBy', many1, many')
 import Data.Attoparsec.ByteString.Char8 (Parser, char, satisfy, inClass, digit, space, notInClass, letter_ascii, anyChar)
-import Data.Maybe (maybe, catMaybes)
+import Data.Maybe (mapMaybe)
 import System.Console.Terminfo.Color (Color(..))
 import System.Console.Terminfo.Base (Terminal)
 import qualified Data.List as L
@@ -54,21 +54,22 @@ data Task = Task { getTimeadded :: UTCTime,
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Parsers for parsing various components |Task|
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+dateTimeFormat :: String
 dateTimeFormat = "%Y-%m-%d %H:%M"
 
 --TODO: The only priorities must be changed to ABab. No Cc.
 parsePriority :: Parser (Maybe Priority)
-parsePriority = optional $ (char '$' *> satisfy (inClass "ABCabc"))
+parsePriority = optional (char '$' *> satisfy (inClass "ABab"))
 
 parseDate :: Parser UTCTime
-parseDate = (readTime defaultTimeLocale dateTimeFormat)
-        <$> (count 16 $ choice [digit, char '-', char ':', space])
+parseDate = readTime defaultTimeLocale dateTimeFormat
+        <$> count 16 (choice [digit, char '-', char ':', space])
 
 parseProject :: Parser (Maybe Project)
-parseProject = optional $ (char '+' *> many1 (letter_ascii <|> digit))
+parseProject = optional (char '+' *> many1 (letter_ascii <|> digit))
 
 parseContent :: Parser String
-parseContent  = L.intercalate " " <$> sepBy1 parseWord space where
+parseContent  = unwords <$> sepBy1 parseWord space where
     parseWord = many1 (satisfy (notInClass "+@$ "))
 
 parseContext :: Parser [Context]
@@ -80,9 +81,9 @@ parseTask = Task
     <$> parseDate <* space
     <*> optional (parseDate <* space)
     <*> parseContent
-    <*> ((optional space) *> parseProject)
-    <*> ((optional space) *> parseContext)
-    <*> ((optional space) *> parsePriority)
+    <*> (optional space *> parseProject)
+    <*> (optional space *> parseContext)
+    <*> (optional space *> parsePriority)
 
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -96,15 +97,15 @@ parseInput = (,)
 -- Show instance for |Task|
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 instance Show (Task) where
-    show t = L.intercalate " " $ filter (not . null) $ telements where
+    show t = unwords $ filter (not . null) telements where
         createtime  = fmttime (getTimeadded t)
         donetime    = maybe ""  fmttime (getTimedone t)
         taskcontent = getTask t
         project     = maybe "" ('+':) (getProject t)
-        context     = L.intercalate " " $ map ('@':) (getContext t)
-        priority    = maybe "" ((['$']++).(:[])) (getPriority t)
+        context     = unwords $ map ('@':) (getContext t)
+        priority    = maybe "" (("$"++).(:[])) (getPriority t)
         fmttime     = formatTime defaultTimeLocale dateTimeFormat
-        telements   = createtime:donetime:taskcontent:project:context:priority:[]
+        telements   = [createtime,donetime,taskcontent,project,context,priority]
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- |Taskadd| type. Type that is used while adding a new task inside
@@ -119,9 +120,9 @@ data Taskadd = Taskadd { newContent  :: String,
 parseTaskAdd :: Parser Taskadd
 parseTaskAdd = Taskadd
     <$> parseContent
-    <*> ((optional space) *> parseProject)
-    <*> ((optional space) *> parseContext)
-    <*> ((optional space) *> parsePriority)
+    <*> (optional space *> parseProject)
+    <*> (optional space *> parseContext)
+    <*> (optional space *> parsePriority)
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- |Sessionstate| type. This is used for keeping track of added and
@@ -138,23 +139,23 @@ data Sessionstate = Sessionstate { sessionTasks    :: M.IntMap Task,
 -- Internal API
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 lsProjects :: [Task] -> [Project]
-lsProjects t = L.nub $ catMaybes $ map getProject t
+lsProjects t = L.nub $ mapMaybe getProject t
 
 lsContexts :: [Task] -> [Context]
-lsContexts t = L.nub $ concat $ map getContext t
+lsContexts t = L.nub $ concatMap getContext t
 
 lsProjectsM :: M.IntMap Task -> [Project]
-lsProjectsM tm = L.nub $ catMaybes $ map getProject $ M.elems tm
+lsProjectsM tm = L.nub $ mapMaybe getProject $ M.elems tm
 
 lsContextsM :: M.IntMap Task -> [Context]
-lsContextsM tm = L.nub $ concat $ map getContext $ M.elems tm
+lsContextsM tm = L.nub $ concatMap getContext $ M.elems tm
 
 toMap :: [Task] -> M.IntMap Task
 toMap t = M.fromAscList $ zip [1..] t
 
 insertTaskIntoMap :: Task -> M.IntMap Task -> M.IntMap Task
 insertTaskIntoMap t tm = M.insert key t tm where
-    key = if M.null tm then 1 else (fst $ M.findMax tm) + 1
+    key = if M.null tm then 1 else fst (M.findMax tm) + 1
 
 deleteTaskFromMap :: M.IntMap Task -> Int -> M.IntMap Task
 deleteTaskFromMap tm key = M.delete key tm
@@ -171,10 +172,14 @@ allTasksWithPriority :: M.IntMap Task -> Maybe Priority -> M.IntMap Task
 allTasksWithPriority tm Nothing = M.filter (( == Nothing) . getPriority) tm
 allTasksWithPriority tm pr      = M.filter (( == pr) . getPriority) tm
 
+unknowncmd :: String -> String
+unknowncmd = (++) "Unknown: "
 
-unknowncmd   = (++) "Unknown: "
+programerror :: String -> String
 programerror = (++) "Error: "
-info         = (++) "Info: "
+
+info :: String -> String
+info = (++) "Info: "
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Hardcoded Settings
@@ -185,6 +190,11 @@ todoFile = "todoapi.txt"
 prompt :: String
 prompt = ":: "
 
+prioritycolorA :: Color
 prioritycolorA = Red
+
+prioritycolorB :: Color
 prioritycolorB = Yellow
+
+prioritycolorC :: Color
 prioritycolorC = Blue
