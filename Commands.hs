@@ -14,8 +14,8 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.IO.Class (liftIO)
 import Data.Maybe (fromJust, isNothing)
 import Data.Attoparsec.ByteString.Char8 (parseOnly)
-import System.Console.Terminfo.Color (withForegroundColor)
-import System.Console.Terminfo.Base (getCapability, runTermOutput, termText)
+import System.Console.Terminfo.Color (withForegroundColor, restoreDefaultColors)
+import System.Console.Terminfo.Base (Terminal, getCapability, runTermOutput, termText)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.IntMap.Lazy as M
 import qualified Data.List as L
@@ -133,26 +133,43 @@ listProjects Nothing = do
     mapM_ outputStrLn printstrs
 listProjects _ = return ()
 
+--listTasks :: Maybe String -> InputT (StateT Sessionstate IO) ()
+--listTasks Nothing = do
+    --ss <- lift get
+    --let tasksascending = M.assocs (M.map show $ sessionTasks ss)
+        --printstrs      = map commandViewFormat tasksascending
+    --mapM_ outputStrLn printstrs
+----TODO: make tasks searcheable
+--listTasks _ = return ()
+
 listTasks :: Maybe String -> InputT (StateT Sessionstate IO) ()
 listTasks Nothing = do
     ss <- lift get
-    let tasksascending = M.assocs (M.map show $ sessionTasks ss)
-        printstrs      = map commandViewFormat tasksascending
-    mapM_ applyColor printstrs
---TODO: make tasks searcheable
+    liftIO $ printColoredTasks (sessionTasks ss) (sessionTerminal ss)
 listTasks _ = return ()
-
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Internal API
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-applyColor :: String -> InputT (StateT Sessionstate IO) ()
-applyColor s = do
-    ss <- lift get
-    let terminal = sessionTerminal ss
-        capability = maybe (Just (termText s)) (\t -> getCapability t (withForegroundColor <*> pure prioritycolorA <*> pure (termText s))) (sessionTerminal ss)
-    liftIO $ runTermOutput (fromJust terminal) (fromJust capability)
+{-applyColor :: String -> InputT (StateT Sessionstate IO) ()-}
+{-applyColor s = do-}
+    {-ss <- lift get-}
+    {-let terminal = sessionTerminal ss-}
+        {-capability = maybe (Just (termText s)) (\t -> getCapability t (withForegroundColor <*> pure prioritycolorA <*> pure (termText s))) (sessionTerminal ss)-}
+    {-liftIO $ runTermOutput (fromJust terminal) (fromJust capability)-}
+
+printColoredTasks :: M.IntMap Task -> Maybe Terminal -> IO ()
+printColoredTasks taskmap terminal = case terminal of
+        Nothing -> mapM_ (putStrLn . commandViewFormat) $ M.assocs (M.map show taskmap)
+        Just t  -> mapM_ ((>> putStrLn "") . (runTermOutput t)) $ M.elems $ M.mapMaybeWithKey (applycolor t) taskmap
+    where applycolor term k tsk = case getPriority tsk of
+            Just 'A' -> usecolor prioritycolorA term k tsk
+            Just 'a' -> usecolor prioritycolorA term k tsk
+            Just 'B' -> usecolor prioritycolorB term k tsk
+            Just 'b' -> usecolor prioritycolorB term k tsk
+            _        -> usecolor nopriority term k tsk
+          usecolor c t k tsk = getCapability t $ withForegroundColor <*> pure c <*> pure (termText $ commandViewFormat (k, show tsk))
 
 commandViewFormat :: (Int, String) -> String
 commandViewFormat = uncurry (printf "%3d -> %s")

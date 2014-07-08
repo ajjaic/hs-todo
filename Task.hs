@@ -11,7 +11,7 @@ module Task (
     lsContextsM,
     prioritycolorA,
     prioritycolorB,
-    prioritycolorC,
+    nopriority,
     toMap,
     todoFile,
     prompt,
@@ -151,9 +151,11 @@ lsContextsM :: M.IntMap Task -> [Context]
 lsContextsM tm = L.nub $ concatMap getContext $ M.elems tm
 
 toMap :: [Task] -> M.IntMap Task
+--TODO: Perhaps this should not be a part of the API
 toMap t = M.fromAscList $ zip [1..] t
 
 insertTaskIntoMap :: Task -> M.IntMap Task -> M.IntMap Task
+--TODO: Perhaps this should not be a part of the API
 insertTaskIntoMap t tm = M.insert key t tm where
     key = if M.null tm then 1 else fst (M.findMax tm) + 1
 
@@ -194,7 +196,7 @@ prioritycolorA :: Color
 prioritycolorA = Red
 
 prioritycolorB :: Color
-prioritycolorB = Yellow
+prioritycolorB = Blue
 
-prioritycolorC :: Color
-prioritycolorC = Blue
+nopriority :: Color
+nopriority = Green
