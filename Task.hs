@@ -11,7 +11,8 @@ module Task (
     lsContextsM,
     prioritycolorA,
     prioritycolorB,
-    nopriority,
+    headingcolor,
+    noprioritycolor,
     toMap,
     todoFile,
     prompt,
@@ -198,5 +199,8 @@ prioritycolorA = Red
 prioritycolorB :: Color
 prioritycolorB = Blue
 
-nopriority :: Color
-nopriority = Green
+noprioritycolor :: Color
+noprioritycolor = Green
+
+headingcolor :: Color
+headingcolor = White
