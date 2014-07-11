@@ -28,9 +28,10 @@ import Task
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Type for |Command|
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-data Command = Command {name :: String,
-                        func :: Maybe String -> InputT (StateT Sessionstate IO) (),
-                        desc :: String}
+data Command = Command {
+    name :: String,
+    func :: Maybe String -> InputT (StateT Sessionstate IO) (),
+    desc :: String}
 
 cmds :: [Command]
 cmds = [Command   "ls"     listTasks      "ls [task search]. List all the tasks",
@@ -81,7 +82,7 @@ addTask (Just newtask) = case parseOnly parseTaskAdd (B.pack newtask) of
                 contexts        = newContext r
                 priority        = newPriority r
                 task            = Task utc Nothing content project contexts priority
-                newtaskset      = M.insert 1 task (if M.member 1 (sessionTasks ss) then M.mapKeys (+1) (sessionTasks ss) else sessionTasks ss)
+                newtaskset      = insertTaskIntoMap task (sessionTasks ss)
                 newprojectset   = if isNothing project then sessionProjects ss else sessionProjects ss `L.union` [fromJust project]
                 newcontextset   = if L.null contexts then sessionContexts ss else sessionContexts ss `L.union` contexts
                 newautocomptags = let ac   = sessionAutocomp ss
@@ -89,6 +90,8 @@ addTask (Just newtask) = case parseOnly parseTaskAdd (B.pack newtask) of
                                    in L.union ac tags
                 newss = ss {sessionTasks=newtaskset, sessionProjects=newprojectset, sessionContexts=newcontextset, sessionAutocomp=newautocomptags}
             lift $ put newss
+            outputStrLn (info "Task Added")
+            ((>>= mapM_ outputStrLn) . colorTask) $ M.singleton 1 task
         (Left l) -> outputStrLn (programerror l)
 
 contextView :: Maybe String -> InputT (StateT Sessionstate IO) ()
@@ -100,36 +103,31 @@ contextView Nothing = do
             contextView (Just $ last c)
 contextView ctx@(Just c) = do
     ss <- lift get
-    let t = M.toAscList $ M.map show $ allTasksWithContext (sessionTasks ss) ctx
-        printtasks = map commandViewFormat t
-    unless (L.null t) $ outputStrLn (makeContext c) >> mapM_ outputStrLn printtasks
-
-{-projectView :: Maybe String -> InputT (StateT Sessionstate IO) ()                        -}
-{-projectView Nothing = do                                                                 -}
-{-    ss <- lift get                                                                       -}
-{-    let p = sessionProjects ss                                                           -}
-{-    unless (L.null p) $ do                                                               -}
-{-           mapM_ ((>> outputStrLn "") . projectView . Just) (init p)                     -}
-{-           projectView (Just $ last p)                                                   -}
-{-projectView prj@(Just p) = do                                                            -}
-{-    ss <- lift get                                                                       -}
-{-    let t          = M.toAscList $ M.map show $ allTasksWithProject (sessionTasks ss) prj-}
-{-        printtasks = map commandViewFormat t                                             -}
-{-    unless (L.null t) $ outputStrLn (makeProject p) >> mapM_ outputStrLn printtasks      -}
+    let tasks = allTasksWithContext (sessionTasks ss) ctx
+        ctxf = makeContext c
+    unless (M.null tasks) $ ((>>= outputStrLn) . applyColor headingcolor) ctxf
+                     >> ((>>= mapM_ outputStrLn) . colorTask) tasks
 
 projectView :: Maybe String -> InputT (StateT Sessionstate IO) ()
+projectView Nothing = do
+    ss <- lift get
+    let p = sessionProjects ss
+    unless (L.null p) $ do
+           mapM_ ((>> outputStrLn "") . projectView . Just) (init p)
+           projectView (Just $ last p)
 projectView prj@(Just p) = do
     ss <- lift get
     let tasks = allTasksWithProject (sessionTasks ss) prj
-        heading = applyColor
+        prjf = makeProject p
+    unless (M.null tasks) $ ((>>= outputStrLn) . applyColor headingcolor) prjf
+                         >> ((>>= mapM_ outputStrLn) . colorTask) tasks
 
-    unless (L.null tasks) $ colorTask tasks >>= (\s -> )
 
 listContexts :: Maybe String -> InputT (StateT Sessionstate IO) ()
 listContexts Nothing = do
     ss <- lift get
     let contexts  = zip [1 .. ] (sessionContexts ss)
-    coloured <- mapM (applyColor headingcolor) contexts
+    coloured <- mapM (applyColor headingcolor . commandViewFormat) contexts
     mapM_ outputStrLn coloured
 listContexts _ = return ()
 
@@ -137,7 +135,7 @@ listProjects :: Maybe String -> InputT (StateT Sessionstate IO) ()
 listProjects Nothing = do
     ss <- lift get
     let projects  = zip [1 .. ] (sessionProjects ss)
-    coloured <- mapM (applyColor headingcolor) projects
+    coloured <- mapM (applyColor headingcolor . commandViewFormat) projects
     mapM_ outputStrLn coloured
 listProjects _ = return ()
 
@@ -151,17 +149,13 @@ listTasks _ = return ()
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Internal API
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-applyColorHeading :: Color -> Terminal -> String -> String
-applyColorHeading c t s = fromMaybe s (getCapability t $ withForegroundColor <*> pure c <*> pure s)
-
-applyColor :: Color -> (Int, String) -> InputT (StateT Sessionstate IO) String
-applyColor c istr = do
+applyColor :: Color -> String -> InputT (StateT Sessionstate IO) String
+applyColor c str = do
     ss <- lift get
     let terminal  = sessionTerminal ss
-        cmdview = commandViewFormat istr
     case terminal of
-        Nothing -> return cmdview
-        Just t -> return $ fromMaybe cmdview $ getCapability t $ withForegroundColor <*> pure c <*> pure cmdview
+        Nothing -> return str
+        Just t -> return $ fromMaybe str $ getCapability t $ withForegroundColor <*> pure c <*> pure str
 
 colorForPriority :: Task -> Color
 colorForPriority t = case getPriority t of

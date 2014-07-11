@@ -58,7 +58,6 @@ data Task = Task { getTimeadded :: UTCTime,
 dateTimeFormat :: String
 dateTimeFormat = "%Y-%m-%d %H:%M"
 
---TODO: The only priorities must be changed to ABab. No Cc.
 parsePriority :: Parser (Maybe Priority)
 parsePriority = optional (char '$' *> satisfy (inClass "ABab"))
 
@@ -156,9 +155,7 @@ toMap :: [Task] -> M.IntMap Task
 toMap t = M.fromAscList $ zip [1..] t
 
 insertTaskIntoMap :: Task -> M.IntMap Task -> M.IntMap Task
---TODO: Perhaps this should not be a part of the API
-insertTaskIntoMap t tm = M.insert key t tm where
-    key = if M.null tm then 1 else fst (M.findMax tm) + 1
+insertTaskIntoMap t tm = M.insert 1 t (if M.member 1 tm then M.mapKeys (+1) tm else tm)
 
 deleteTaskFromMap :: M.IntMap Task -> Int -> M.IntMap Task
 deleteTaskFromMap tm key = M.delete key tm
@@ -197,10 +194,10 @@ prioritycolorA :: Color
 prioritycolorA = Red
 
 prioritycolorB :: Color
-prioritycolorB = Blue
+prioritycolorB = Green
 
 noprioritycolor :: Color
-noprioritycolor = Green
+noprioritycolor = Blue
 
 headingcolor :: Color
-headingcolor = White
+headingcolor = Magenta

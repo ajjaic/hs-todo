@@ -58,7 +58,7 @@ readTaskFile f = withFile f ReadMode helper where
 -- Autocomplete function
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 autocomp :: CompletionFunc (StateT Sessionstate IO)
-autocomp = completeWord Nothing "" autocomp' where
+autocomp = completeWord Nothing " " autocomp' where
     noendspace str = Completion str str False
     autocomp' :: String -> (StateT Sessionstate IO) [Completion]
     autocomp' s = do
